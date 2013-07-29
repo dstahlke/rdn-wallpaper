@@ -3,13 +3,33 @@
       package="org.stahlke.rdnwallpaper"
       android:versionCode="1"
       android:versionName="1.0">
-    <application android:label="@string/app_name" >
-        <activity android:name="RdnWallpaperActivity"
-                  android:label="@string/app_name">
+
+    <uses-sdk android:minSdkVersion="9" />
+    <uses-feature android:name="android.software.live_wallpaper" />
+
+    <application android:label="@string/app_name"
+        android:icon="@drawable/icon">
+
+        <activity
+            android:name="RdnPrefs"
+            android:launchMode="standard"
+            android:theme="@android:style/Theme.WallpaperSettings">
             <intent-filter>
+                <category android:name="android.intent.category.PREFERENCE" />
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service android:name="RdnWallpaper"
+            android:permission="android.permission.BIND_WALLPAPER"
+            android:enabled="true"
+            android:label="@string/app_name">
+
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data android:name="android.service.wallpaper"
+                android:resource="@xml/rdnwallpaper" />
+        </service>
     </application>
-</manifest> 
+</manifest>
