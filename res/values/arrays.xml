@@ -10,4 +10,45 @@
         <item name="GL">0</item>
         <item name="GS">1</item>
     </string-array>
+
+    <string-array name="presets0">
+        <item>foo</item>
+        <item>bar</item>
+        <item>baz</item>
+    </string-array>
+
+    <string-array name="presets1">
+        <item>p0</item>
+        <item>p1</item>
+    </string-array>
+
+    <array name="presets0_0">
+        <item>0.5</item>
+        <item>-1.6</item>
+        <item>1.1</item>
+    </array>
+
+    <array name="presets0_1">
+        <item>0.5</item>
+        <item>0.02</item>
+        <item>-1.27</item>
+    </array>
+
+    <array name="presets0_2">
+        <item>1.0</item>
+        <item>0.0</item>
+        <item>2.0</item>
+    </array>
+
+    <array name="presets1_0">
+        <item>1.0</item>
+        <item>2.8</item>
+        <item>34.0</item>
+    </array>
+
+    <array name="presets1_1">
+        <item>1.0</item>
+        <item>2.888</item>
+        <item>37.4</item>
+    </array>
 </resources>

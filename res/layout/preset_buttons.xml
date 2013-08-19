@@ -10,7 +10,7 @@
     android:paddingBottom="5dp"
     >
 
-    <LinearLayout android:id="@+id/seekBarPrefBarContainer"
+    <LinearLayout android:id="@+id/PresetButtonsContainer"
             android:layout_alignParentLeft="true"
             android:layout_alignParentBottom="true"
             android:layout_width="fill_parent"

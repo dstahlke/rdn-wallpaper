@@ -9,7 +9,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.graphics.*;
 import android.content.Context;
-import android.view.View;
+import android.view.*;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
@@ -77,6 +77,10 @@ public class RdnPrefs extends PreferenceActivity implements
         for(SeekBarPreference slider : sliders.get(f_id)) {
             sliders_box.addPreference(slider);
         }
+
+        PresetsBox presets_box = (PresetsBox)findPreference("presets_box");
+        presets_box.setFunction(f_id);
+        presets_box.setSliders(sliders.get(f_id));
 
         RdnWallpaper.resetGrid();
     }
