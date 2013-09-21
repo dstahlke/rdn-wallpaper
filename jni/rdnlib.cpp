@@ -187,6 +187,48 @@ struct GrayScott : public FunctionBase {
     float D, phi, mu;
 };
 
+void render_line_GL(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
+    float *gridA = G.getChannel(0) + y * G.w;
+    float *gridB = G.getChannel(1) + y * G.w;
+    float *gridDA = DG.getChannel(0) + y * G.w;
+    float *gridDB = DG.getChannel(1) + y * G.w;
+    for(int x = 0; x < G.w; x++) {
+        float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
+        float rk = gridDA[x]*gridDA[x] + gridDB[x]*gridDB[x];
+        int red   = (int)((rv-rk/4) * 200);
+        int green = (int)((rv-rk/2) * 200);
+        int blue  = green + (int)(gridA[x] * 30);
+
+        if(red < 0) red = 0;
+        if(red > 255) red = 255;
+        if(green < 0) green = 0;
+        if(green > 255) green = 255;
+        if(blue < 0) blue = 0;
+        if(blue > 255) blue = 255;
+        pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+    }
+}
+
+void render_line_GS(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
+    float *gridA = G.getChannel(0) + y * G.w;
+    float *gridB = G.getChannel(1) + y * G.w;
+    float *gridDA = DG.getChannel(0) + y * G.w;
+    float *gridDB = DG.getChannel(1) + y * G.w;
+    for(int x = 0; x < G.w; x++) {
+        int red   = (int)(gridA [x] * 200);
+        int green = (int)(gridDA[x] * 200);
+        int blue  = (int)(gridB [x] * 200);
+
+        if(red < 0) red = 0;
+        if(red > 255) red = 255;
+        if(green < 0) green = 0;
+        if(green > 255) green = 255;
+        if(blue < 0) blue = 0;
+        if(blue > 255) blue = 255;
+        pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+    }
+}
+
 struct RdnGrids {
     RdnGrids(int _w, int _h) :
         w(_w), h(_h),
@@ -257,26 +299,8 @@ struct RdnGrids {
 
     void draw(void *pixels, int stride, FunctionBase *fn) {
         for(int y = 0; y < h; y++) {
-            uint32_t *line = (uint32_t *)((char *)pixels + y * stride);
-            float *gridYA = gridY.getChannel(0) + y * w;
-            float *gridYB = gridY.getChannel(1) + y * w;
-            float *gridKA = gridK1.getChannel(0) + y * w;
-            float *gridKB = gridK1.getChannel(1) + y * w;
-            for(int x = 0; x < w; x++) {
-                float rv = gridYA[x]*gridYA[x] + gridYB[x]*gridYB[x];
-                float rk = gridKA[x]*gridKA[x] + gridKB[x]*gridKB[x];
-                int red   = (int)((rv-rk/4) * 200);
-                int green = (int)((rv-rk/2) * 200);
-                int blue  = green + (int)(gridYA[x] * 30);
-
-                if(red < 0) red = 0;
-                if(red > 255) red = 255;
-                if(green < 0) green = 0;
-                if(green > 255) green = 255;
-                if(blue < 0) blue = 0;
-                if(blue > 255) blue = 255;
-                line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
-            }
+            uint32_t *pix_line = (uint32_t *)((char *)pixels + y * stride);
+            render_line_GL(pix_line, gridY, gridK1, y);
         }
     }
 
