@@ -17,13 +17,14 @@
     </PreferenceCategory>
     <PreferenceCategory
         android:key="slider_params"
-        android:title="Params"
+        android:title="Parameters (sliders)"
         >
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_0_0"
             android:defaultValue="1.0"
             rdnwallpaper:min="0.1"
             rdnwallpaper:max="3.0"
+            rdnwallpaper:rate="0.01"
             rdnwallpaper:format="D: %.2f"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
@@ -43,10 +44,11 @@
 
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_0"
-            android:defaultValue="0.01"
+            android:defaultValue="0.1"
             rdnwallpaper:min="0.02"
             rdnwallpaper:max="0.2"
-            rdnwallpaper:format="D: %.2f"
+            rdnwallpaper:rate="0.001"
+            rdnwallpaper:format="D: %.3f"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_1"

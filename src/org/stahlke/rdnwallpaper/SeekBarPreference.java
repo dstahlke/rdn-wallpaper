@@ -183,10 +183,10 @@ public class SeekBarPreference extends Preference {
     }
 
     private void setValuesFromXml(AttributeSet attrs) {
-        setRange(
-            attrs.getAttributeFloatValue(RDNWALLPAPERNS, "min", 0),
-            attrs.getAttributeFloatValue(RDNWALLPAPERNS, "max", 100)
-        );
+        mMinValue = attrs.getAttributeFloatValue(RDNWALLPAPERNS, "min", 0);
+        mMaxValue = attrs.getAttributeFloatValue(RDNWALLPAPERNS, "max", 100);
+        mStepValue = attrs.getAttributeFloatValue(RDNWALLPAPERNS, "rate",
+                (mMaxValue - mMinValue) / 1000f);
 
         String summary = attrs.getAttributeValue(ANDROIDNS, "summary");
         if(summary == null) summary = "";
@@ -244,12 +244,6 @@ public class SeekBarPreference extends Preference {
         Log.i(RdnWallpaper.TAG, "setValue "+mCurrentValue);
         // redraw
         if(mSeekBar != null) mSeekBar.invalidate();
-    }
-
-    public void setRange(float min, float max) {
-        mMinValue = min;
-        mMaxValue = max;
-        mStepValue = (max - min) / 5000f;
     }
 
     @Override
