@@ -31,7 +31,7 @@ public class SeekBarPreference extends Preference {
     private float mMinValue = 0;
     private float mStepValue = 1;
     private float mCurrentValue;
-    private String mLabel;
+    private String mFormat;
     private TheView mSeekBar;
 
     class TheView extends View {
@@ -161,8 +161,9 @@ public class SeekBarPreference extends Preference {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            String text = mLabel + ": " + Float.toString(mCurrentValue);
-            canvas.drawText(text, getPaddingLeft(), getPaddingTop() - mAscent, mTextPaint);
+            String text = String.format(mFormat, mCurrentValue);
+            canvas.drawText(text, getPaddingLeft(), getPaddingTop() - mAscent,
+                    mTextPaint);
         }
     }
 
@@ -186,8 +187,12 @@ public class SeekBarPreference extends Preference {
             attrs.getAttributeFloatValue(RDNWALLPAPERNS, "min", 0),
             attrs.getAttributeFloatValue(RDNWALLPAPERNS, "max", 100)
         );
-        mLabel = attrs.getAttributeValue(ANDROIDNS, "summary");
-        if(mLabel == null) mLabel = "";
+
+        String summary = attrs.getAttributeValue(ANDROIDNS, "summary");
+        if(summary == null) summary = "";
+
+        mFormat = attrs.getAttributeValue(RDNWALLPAPERNS, "format");
+        if(mFormat == null) mFormat = summary+": %g";
     }
 
     @Override
