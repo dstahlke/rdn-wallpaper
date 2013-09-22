@@ -244,7 +244,7 @@ public class SeekBarPreference extends Preference {
     public void setRange(float min, float max) {
         mMinValue = min;
         mMaxValue = max;
-        mStepValue = (max - min) / 1000f;
+        mStepValue = (max - min) / 5000f;
     }
 
     @Override

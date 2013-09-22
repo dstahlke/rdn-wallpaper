@@ -39,23 +39,23 @@
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_0"
             android:summary="D"
-            android:defaultValue="1.0"
-            rdnwallpaper:min="0.1"
-            rdnwallpaper:max="3.0"
+            android:defaultValue="0.01"
+            rdnwallpaper:min="0.02"
+            rdnwallpaper:max="0.2"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_1"
-            android:summary="phi"
-            android:defaultValue="2.8"
-            rdnwallpaper:min="1.0"
-            rdnwallpaper:max="5.0"
+            android:summary="F"
+            android:defaultValue="0.01"
+            rdnwallpaper:min="0.000"
+            rdnwallpaper:max="0.120"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_2"
-            android:summary="mu"
-            android:defaultValue="33.7"
-            rdnwallpaper:min="0.0"
-            rdnwallpaper:max="50.0"
+            android:summary="k"
+            android:defaultValue="0.049"
+            rdnwallpaper:min="0.000"
+            rdnwallpaper:max="0.120"
             />
     </PreferenceCategory>
     <Preference

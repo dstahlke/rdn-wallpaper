@@ -20,6 +20,8 @@
     <string-array name="presets1">
         <item>p0</item>
         <item>p1</item>
+        <item>uskate</item>
+        <item>098,056</item>
     </string-array>
 
     <array name="presets0_0">
@@ -41,14 +43,26 @@
     </array>
 
     <array name="presets1_0">
-        <item>1.0</item>
-        <item>2.8</item>
-        <item>34.0</item>
+        <item>0.1</item>
+        <item>0.01</item>
+        <item>0.047</item>
     </array>
 
     <array name="presets1_1">
-        <item>1.0</item>
-        <item>2.888</item>
-        <item>37.4</item>
+        <item>0.1</item>
+        <item>0.014</item>
+        <item>0.054</item>
+    </array>
+
+    <array name="presets1_2">
+        <item>0.05</item>
+        <item>0.062</item>
+        <item>0.0609</item>
+    </array>
+
+    <array name="presets1_3">
+        <item>0.05</item>
+        <item>0.098</item>
+        <item>0.056</item>
     </array>
 </resources>

@@ -69,9 +69,9 @@ public:
         float *gridDA = DG.getChannel(0) + y * G.w;
         float *gridDB = DG.getChannel(1) + y * G.w;
         for(int x = 0; x < G.w; x++) {
-            int red   = (int)(gridA [x] * 200);
-            int green = (int)(gridDA[x] * 200);
-            int blue  = (int)(gridB [x] * 200);
+            int red   = (int)((1-gridA[x]) * 200);
+            int green = (int)(gridDA[x] * 20000);
+            int blue  = (int)(gridB [x] * 2000);
 
             if(red < 0) red = 0;
             if(red > 255) red = 255;
@@ -187,28 +187,28 @@ struct GinzburgLandau : public FunctionBase {
 struct GrayScott : public FunctionBase {
     GrayScott() :
         D(2.0F),
-        phi( 2.8F),
-        mu (33.7F)
+        F(0.01F),
+        k(0.049F)
     { }
 
     virtual void get_background_val(float &A, float &B) {
-        float disc = sqrtf(1 - 4 * phi * phi / mu);
-        A = (1 - disc)/2;
-        B = (1 + disc)/2/phi;
+        A=1; B=0;
     }
 
     virtual void get_seed_val(float &A, float &B, int seed_idx) {
-        get_background_val(A, B);
-        switch(seed_idx % 2) {
-            case 0:  A += 0.0F; B += 0.2F; break;
-            default: A += 0.2F; B += 0.0F; break;
-        }
+        //get_background_val(A, B);
+        //switch(seed_idx % 2) {
+        //    case 0:  A += 0.0F; B += 0.1F; break;
+        //    default: A += 0.1F; B += 0.0F; break;
+        //}
+        A = ((seed_idx*5)%7)/7.0F;
+        B = ((seed_idx*9)%13)/13.0F;
     }
 
     virtual void set_params(float *p) {
         D = p[0];
-        phi = p[1];
-        mu = p[2];
+        F = p[1];
+        k = p[2];
     }
 
     virtual float get_dt() {
@@ -242,8 +242,10 @@ struct GrayScott : public FunctionBase {
                 float ai = Ai[y*w+x];
                 float bi = Bi[y*w+x];
 
-                Ao[y*w+x] = 1 - ai - mu*ai*bi*bi + D*da;
-                Bo[y*w+x] = mu*ai*bi*bi - phi*bi + D*db;
+                //Ao[y*w+x] = 1 - ai - mu*ai*bi*bi + D*da;
+                //Bo[y*w+x] = mu*ai*bi*bi - phi*bi + D*db;
+                Ao[y*w+x] = 2*D*da - ai*bi*bi + F*(1-ai);
+                Bo[y*w+x] =   D*db + ai*bi*bi - (F+k)*bi;
             }
         }
     }
@@ -252,7 +254,7 @@ struct GrayScott : public FunctionBase {
         return pal_gs;
     }
 
-    float D, phi, mu;
+    float D, F, k;
 };
 
 struct RdnGrids {
@@ -265,23 +267,29 @@ struct RdnGrids {
     { }
 
     void reset_grid(FunctionBase *fn) {
+        float A, B;
+        fn->get_background_val(A, B);
         for(int y = 0; y < h; y++) {
             float *gridYA = gridY.getChannel(0) + y * w;
             float *gridYB = gridY.getChannel(1) + y * w;
             for(int x = 0; x < w; x++) {
-                fn->get_background_val(gridYA[x], gridYB[x]);
+                gridYA[x] = A;
+                gridYB[x] = B;
             }
         }
 
-        for(int seed_idx = 0; seed_idx < 10; seed_idx++) {
-            int sr = 10;
+        for(int seed_idx = 0; seed_idx < 20; seed_idx++) {
+            int sr = 20;
+            float A, B;
+            fn->get_seed_val(A, B, seed_idx);
             int x0 = rand() % (w - sr);
             int y0 = rand() % (h - sr);
             for(int y = y0; y < y0+sr; y++) {
                 float *gridYA = gridY.getChannel(0) + y * w;
                 float *gridYB = gridY.getChannel(1) + y * w;
                 for(int x = x0; x < x0+sr; x++) {
-                    fn->get_seed_val(gridYA[x], gridYB[x], seed_idx);
+                    gridYA[x] = A;
+                    gridYB[x] = B;
                 }
             }
         }
