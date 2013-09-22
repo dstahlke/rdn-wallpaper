@@ -48,7 +48,15 @@ public class RdnPrefs extends PreferenceActivity implements
             sliders.add(fn_sliders);
         }
 
-        updateFunction();
+        // update dialog to reflect currently selected function
+        updateFunction(false);
+
+        // This is a hack to trigger the sending of an onSharedPreferenceChanged
+        // event, which causes RdnWallpaper to start running again (Android
+        // pauses wallpapers when the settings dialog is opened).
+        SharedPreferences.Editor ed = prefs.edit();
+        ed.putBoolean("foo", !prefs.getBoolean("foo", false));
+        ed.apply();
     }
 
     public void reseedPressed(View view) {
@@ -58,10 +66,10 @@ public class RdnPrefs extends PreferenceActivity implements
 
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
         Log.i(RdnWallpaper.TAG, "RdnPrefs.onSharedPreferenceChanged");
-        updateFunction();
+        updateFunction(true);
     }
 
-    private void updateFunction() {
+    private void updateFunction(boolean allow_reset_grid) {
         SharedPreferences prefs = PreferenceManager
                 .getDefaultSharedPreferences(this);
         int f_id = Integer.parseInt(prefs.getString("function", "0"));
@@ -82,6 +90,8 @@ public class RdnPrefs extends PreferenceActivity implements
         presets_box.setFunction(f_id);
         presets_box.setSliders(sliders.get(f_id));
 
-        RdnWallpaper.resetGrid();
+        if(allow_reset_grid) {
+            RdnWallpaper.resetGrid();
+        }
     }
 }

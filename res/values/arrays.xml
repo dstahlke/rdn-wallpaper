@@ -55,13 +55,13 @@
     </array>
 
     <array name="presets1_2">
-        <item>0.05</item>
+        <item>0.1</item>
         <item>0.062</item>
         <item>0.0609</item>
     </array>
 
     <array name="presets1_3">
-        <item>0.05</item>
+        <item>0.1</item>
         <item>0.098</item>
         <item>0.056</item>
     </array>
