@@ -31,6 +31,62 @@ struct Grid {
     float *A;
 };
 
+class Palette {
+public:
+    virtual void render_line(uint32_t *pix_line, Grid &G, Grid &DG, int y);
+};
+
+class PaletteGL : public Palette {
+public:
+    void render_line(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
+        float *gridA = G.getChannel(0) + y * G.w;
+        float *gridB = G.getChannel(1) + y * G.w;
+        float *gridDA = DG.getChannel(0) + y * G.w;
+        float *gridDB = DG.getChannel(1) + y * G.w;
+        for(int x = 0; x < G.w; x++) {
+            float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
+            float rk = gridDA[x]*gridDA[x] + gridDB[x]*gridDB[x];
+            int red   = (int)((rv-rk/4) * 200);
+            int green = (int)((rv-rk/2) * 200);
+            int blue  = green + (int)(gridA[x] * 30);
+
+            if(red < 0) red = 0;
+            if(red > 255) red = 255;
+            if(green < 0) green = 0;
+            if(green > 255) green = 255;
+            if(blue < 0) blue = 0;
+            if(blue > 255) blue = 255;
+            pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+        }
+    }
+};
+
+class PaletteGS : public Palette {
+public:
+    void render_line(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
+        float *gridA = G.getChannel(0) + y * G.w;
+        float *gridB = G.getChannel(1) + y * G.w;
+        float *gridDA = DG.getChannel(0) + y * G.w;
+        float *gridDB = DG.getChannel(1) + y * G.w;
+        for(int x = 0; x < G.w; x++) {
+            int red   = (int)(gridA [x] * 200);
+            int green = (int)(gridDA[x] * 200);
+            int blue  = (int)(gridB [x] * 200);
+
+            if(red < 0) red = 0;
+            if(red > 255) red = 255;
+            if(green < 0) green = 0;
+            if(green > 255) green = 255;
+            if(blue < 0) blue = 0;
+            if(blue > 255) blue = 255;
+            pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+        }
+    }
+};
+
+Palette *pal_gl = new PaletteGL();
+Palette *pal_gs = new PaletteGS();
+
 struct FunctionBase {
     virtual ~FunctionBase() { }
 
@@ -52,6 +108,10 @@ struct FunctionBase {
 
     virtual float get_dt() {
         LOGE("method set_params must be overridden");
+    }
+
+    virtual Palette *get_palette(int id) {
+        LOGE("method get_palette must be overridden");
     }
 };
 
@@ -115,6 +175,10 @@ struct GinzburgLandau : public FunctionBase {
                 Bo[y*w+x] = (1-r2)*bi - beta*r2*ai + D*(db + alpha*da);
             }
         }
+    }
+
+    virtual Palette *get_palette(int id) {
+        return pal_gl;
     }
 
     float D, alpha, beta;
@@ -184,50 +248,12 @@ struct GrayScott : public FunctionBase {
         }
     }
 
+    virtual Palette *get_palette(int id) {
+        return pal_gs;
+    }
+
     float D, phi, mu;
 };
-
-void render_line_GL(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
-    float *gridA = G.getChannel(0) + y * G.w;
-    float *gridB = G.getChannel(1) + y * G.w;
-    float *gridDA = DG.getChannel(0) + y * G.w;
-    float *gridDB = DG.getChannel(1) + y * G.w;
-    for(int x = 0; x < G.w; x++) {
-        float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
-        float rk = gridDA[x]*gridDA[x] + gridDB[x]*gridDB[x];
-        int red   = (int)((rv-rk/4) * 200);
-        int green = (int)((rv-rk/2) * 200);
-        int blue  = green + (int)(gridA[x] * 30);
-
-        if(red < 0) red = 0;
-        if(red > 255) red = 255;
-        if(green < 0) green = 0;
-        if(green > 255) green = 255;
-        if(blue < 0) blue = 0;
-        if(blue > 255) blue = 255;
-        pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
-    }
-}
-
-void render_line_GS(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
-    float *gridA = G.getChannel(0) + y * G.w;
-    float *gridB = G.getChannel(1) + y * G.w;
-    float *gridDA = DG.getChannel(0) + y * G.w;
-    float *gridDB = DG.getChannel(1) + y * G.w;
-    for(int x = 0; x < G.w; x++) {
-        int red   = (int)(gridA [x] * 200);
-        int green = (int)(gridDA[x] * 200);
-        int blue  = (int)(gridB [x] * 200);
-
-        if(red < 0) red = 0;
-        if(red > 255) red = 255;
-        if(green < 0) green = 0;
-        if(green > 255) green = 255;
-        if(blue < 0) blue = 0;
-        if(blue > 255) blue = 255;
-        pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
-    }
-}
 
 struct RdnGrids {
     RdnGrids(int _w, int _h) :
@@ -297,10 +323,10 @@ struct RdnGrids {
         //    gridK1.getChannel(0)[0], gridK1.getChannel(1)[0]);
     }
 
-    void draw(void *pixels, int stride, FunctionBase *fn) {
+    void draw(void *pixels, int stride, FunctionBase *fn, Palette *pal) {
         for(int y = 0; y < h; y++) {
             uint32_t *pix_line = (uint32_t *)((char *)pixels + y * stride);
-            render_line_GL(pix_line, gridY, gridK1, y);
+            pal->render_line(pix_line, gridY, gridK1, y);
         }
     }
 
@@ -316,6 +342,7 @@ FunctionBase *fn_gl = new GinzburgLandau();
 FunctionBase *fn_gs = new GrayScott();
 FunctionBase *fn_list[] = { fn_gl, fn_gs };
 FunctionBase *fn = fn_gl;
+Palette *pal = fn->get_palette(0);
 
 extern "C" {
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
@@ -353,13 +380,14 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
     }
 
     rdn->step(fn);
-    rdn->draw(pixels, info.stride, fn);
+    rdn->draw(pixels, info.stride, fn, pal);
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
     JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params_in
 ) {
     fn = fn_list[fn_idx];
+    pal = fn->get_palette(0);
     jfloat *params = env->GetFloatArrayElements(params_in, NULL);
     fn->set_params((float *)params);
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
