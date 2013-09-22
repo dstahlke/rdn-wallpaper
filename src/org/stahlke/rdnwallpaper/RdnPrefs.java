@@ -5,8 +5,6 @@ import java.util.*;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.preference.*;
-import android.widget.Button;
-import android.widget.LinearLayout;
 import android.graphics.*;
 import android.content.Context;
 import android.view.*;
@@ -48,6 +46,17 @@ public class RdnPrefs extends PreferenceActivity implements
             sliders.add(fn_sliders);
         }
 
+        Preference button = (Preference)findPreference("reseed_button");
+        button.setOnPreferenceClickListener(
+            new Preference.OnPreferenceClickListener() {
+                @Override
+                public boolean onPreferenceClick(Preference arg0) {
+                    Log.i(RdnWallpaper.TAG, "reseedPressed");
+                    RdnWallpaper.resetGrid();
+                    return true;
+                }
+        });
+
         // update dialog to reflect currently selected function
         updateFunction(false);
 
@@ -57,11 +66,6 @@ public class RdnPrefs extends PreferenceActivity implements
         SharedPreferences.Editor ed = prefs.edit();
         ed.putBoolean("foo", !prefs.getBoolean("foo", false));
         ed.apply();
-    }
-
-    public void reseedPressed(View view) {
-        Log.i(RdnWallpaper.TAG, "reseedPressed");
-        RdnWallpaper.resetGrid();
     }
 
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {

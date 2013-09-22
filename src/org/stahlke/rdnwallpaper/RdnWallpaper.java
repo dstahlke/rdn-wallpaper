@@ -63,28 +63,9 @@ public class RdnWallpaper extends WallpaperService {
         private SharedPreferences mPrefs;
 
         private Random mRng = new Random();
-        private float[] mWanderTarget;
-        private float mWanderAlpha;
 
         private final Runnable mDrawCallback = new Runnable() {
             public void run() {
-                //if(mPrefs.getBoolean("wander", false)) {
-                //    float step = 0.005f;
-                //    if(mWanderAlpha <= step) {
-                //        mWanderAlpha = 1;
-                //        // FIXME
-                //        mWanderTarget[1] = mRng.nextFloat() * 6.0f - 3.0f;
-                //        mWanderTarget[2] = mRng.nextFloat() * 6.0f - 3.0f;
-                //    }
-                //    SharedPreferences.Editor pedit = mPrefs.edit();
-                //    float[] cur = getParamsArray();
-                //    for(int i=0; i<cur.length; i++) {
-                //        cur[i] += (mWanderTarget[i] - cur[i]) / mWanderAlpha * step;
-                //        pedit.putFloat("param"+i, cur[i]);
-                //    }
-                //    pedit.apply();
-                //    mWanderAlpha -= step;
-                //}
                 drawFrame();
             }
         };
@@ -106,9 +87,6 @@ public class RdnWallpaper extends WallpaperService {
             mPrefs.registerOnSharedPreferenceChangeListener(this);
 
             setParamsToPrefs();
-
-            mWanderTarget = getParamsArray();
-            mWanderAlpha = 0;
         }
 
         private int getFnIdx() {
@@ -116,7 +94,6 @@ public class RdnWallpaper extends WallpaperService {
         }
 
         public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-            Log.i(TAG, "wander="+prefs.getBoolean("wander", false));
             Log.i(TAG, "alpha="+prefs.getFloat("param0", 0));
             Log.i(TAG, "function="+getFnIdx());
             setParamsToPrefs();
@@ -220,16 +197,7 @@ public class RdnWallpaper extends WallpaperService {
                     long tf = SystemClock.elapsedRealtime();
                     long gap = tf - mLastDrawTime;
                     mLastDrawTime = tf;
-                    c.drawText("gap="+gap, 10, 100, mPaint);
-                    c.drawText("calc="+(t2-t1), 10, 120, mPaint);
-                    c.drawText("draw="+(tf-t2), 10, 140, mPaint);
-
-                    float[] p = getParamsArray();
-                    for(int i=0; i<p.length; i++) {
-                        c.drawText("p["+i+"]="+p[i], 120, 100+i*20, mPaint);
-                    }
-                    c.drawText("alpha="+mWanderAlpha, 120, 100+p.length*20, mPaint);
-
+                    // FIXME
                     c.drawText("gap="+gap, 10, 100, mPaint);
                     c.drawText("calc="+(t2-t1), 10, 120, mPaint);
                     c.drawText("draw="+(tf-t2), 10, 140, mPaint);
