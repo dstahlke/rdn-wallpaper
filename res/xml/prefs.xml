@@ -4,15 +4,17 @@
     xmlns:rdnwallpaper="http://www.stahlke.org/dan/rdnwallpaper">
     <CheckBoxPreference android:key="wander"
         android:title="Wander"></CheckBoxPreference>
-    <ListPreference android:key="function"
-        android:title="Function"
-        android:defaultValue="0"
-        android:entries="@array/functions"
-        android:entryValues="@array/functionsValues"
-        />
+    <PreferenceCategory android:title="Function">
+        <ListPreference android:key="function"
+            android:title="Function"
+            android:defaultValue="0"
+            android:entries="@array/functions"
+            android:entryValues="@array/functionsValues"
+            />
+    </PreferenceCategory>
     <PreferenceCategory
         android:key="slider_params"
-        android:layout="@layout/slider_params"
+        android:title="Params"
         >
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_0_0"
@@ -62,7 +64,10 @@
         android:key="prefs_buttons_box"
         android:layout="@layout/prefs_buttons_box"
         />
-    <org.stahlke.rdnwallpaper.PresetsBox
-        android:key="presets_box"
-        />
+    <PreferenceCategory android:title="Presets">
+        <org.stahlke.rdnwallpaper.PresetsBox
+            android:key="presets_box"
+            android:title="Presets"
+            />
+    </PreferenceCategory>
 </PreferenceScreen>

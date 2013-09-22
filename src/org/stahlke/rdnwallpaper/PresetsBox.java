@@ -22,15 +22,9 @@ public class PresetsBox extends Preference {
     private static final String ANDROIDNS="http://schemas.android.com/apk/res/android";
 
     private Context mContext;
-    private TheView mView;
+    private LinearLayout mButtonsBox;
     private int mFnId;
     private List<SeekBarPreference> mSliders;
-
-    class TheView extends LinearLayout {
-        public TheView(Context context, AttributeSet attrs) {
-            super(context, attrs);
-        }
-    }
 
     public PresetsBox(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -44,7 +38,7 @@ public class PresetsBox extends Preference {
 
     private void initPreference(Context context, AttributeSet attrs) {
         mContext = context;
-        mView = new TheView(context, attrs);
+        mButtonsBox = new LinearLayout(context, attrs);
         setFunction(0);
     }
 
@@ -55,7 +49,7 @@ public class PresetsBox extends Preference {
                 mContext.getResources().getIdentifier(
                     "presets"+mFnId, "array", mContext.getPackageName()));
 
-        mView.removeAllViews();
+        mButtonsBox.removeAllViews();
         for(int i=0; i<preset_labels.length; i++) {
             Button b = new Button(mContext);
             final int ii = i;
@@ -65,7 +59,7 @@ public class PresetsBox extends Preference {
                 }
             });
             b.setText(preset_labels[i]);
-            mView.addView(b);
+            mButtonsBox.addView(b);
         }
     }
 
@@ -96,9 +90,9 @@ public class PresetsBox extends Preference {
                 getContext().getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 
             layout = mInflater.inflate(
-                R.layout.seek_bar_preference, parent, false);
+                R.layout.preset_buttons, parent, false);
         } catch(Exception e) {
-            Log.e(TAG, "Error creating seek bar preference", e);
+            Log.e(TAG, "Error creating presets box", e);
         }
 
         return layout;
@@ -110,18 +104,20 @@ public class PresetsBox extends Preference {
         super.onBindView(view);
 
         try {
-            // move our seekbar to the new view we've been given
-            ViewParent oldContainer = mView.getParent();
-            ViewGroup newContainer = (ViewGroup) view.findViewById(R.id.seekBarPrefBarContainer);
+            // move our container to the new view we've been given
+            ViewParent oldContainer = mButtonsBox.getParent();
+            ViewGroup newContainer = (ViewGroup)view.findViewById(
+                    R.id.PresetButtonsContainer);
 
             if (oldContainer != newContainer) {
-                // remove the seekbar from the old view
+                // remove the container from the old view
                 if (oldContainer != null) {
-                    ((ViewGroup) oldContainer).removeView(mView);
+                    ((ViewGroup) oldContainer).removeView(mButtonsBox);
                 }
-                // remove the existing seekbar (there may not be one) and add ours
+                // remove the existing container (there may not be one) and add ours
                 newContainer.removeAllViews();
-                newContainer.addView(mView, ViewGroup.LayoutParams.FILL_PARENT,
+                newContainer.addView(mButtonsBox,
+                        ViewGroup.LayoutParams.FILL_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT);
             }
         } catch(Exception ex) {
