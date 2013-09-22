@@ -29,14 +29,14 @@
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_0_1"
-            android:defaultValue="0.174"
+            android:defaultValue="-1.6"
             rdnwallpaper:min="-5.0"
             rdnwallpaper:max="5.0"
             rdnwallpaper:format="α: %.3f"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_0_2"
-            android:defaultValue="2.168"
+            android:defaultValue="1.1"
             rdnwallpaper:min="-5.0"
             rdnwallpaper:max="5.0"
             rdnwallpaper:format="β: %.3f"
@@ -59,7 +59,7 @@
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_2"
-            android:defaultValue="0.049"
+            android:defaultValue="0.047"
             rdnwallpaper:min="0.000"
             rdnwallpaper:max="0.120"
             rdnwallpaper:format="k: %.4f"
@@ -69,6 +69,28 @@
         <org.stahlke.rdnwallpaper.PresetsBox
             android:key="presets_box"
             android:title="Presets"
+            />
+    </PreferenceCategory>
+    <PreferenceCategory
+        android:title="Performance"
+        >
+        <ListPreference android:key="resolution"
+            android:title="Resolution"
+            android:defaultValue="0"
+            android:entries="@array/resolution_labels"
+            android:entryValues="@array/resolution_vals"
+            />
+        <ListPreference android:key="repeatX"
+            android:title="Repetitions X"
+            android:defaultValue="0"
+            android:entries="@array/tilerepeat_labels"
+            android:entryValues="@array/tilerepeat_vals"
+            />
+        <ListPreference android:key="repeatY"
+            android:title="Repetitions Y"
+            android:defaultValue="0"
+            android:entries="@array/tilerepeat_labels"
+            android:entryValues="@array/tilerepeat_vals"
             />
     </PreferenceCategory>
 </PreferenceScreen>

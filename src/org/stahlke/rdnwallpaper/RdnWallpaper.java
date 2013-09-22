@@ -29,6 +29,18 @@ public class RdnWallpaper extends WallpaperService {
 
     private final Handler mHandler = new Handler();
 
+    static public int getDefaultRes(int w, int h) {
+        return 4;
+    }
+
+    static public int getDefaultRepeatX(int w, int h) {
+        return w / 500 + 1;
+    }
+
+    static public int getDefaultRepeatY(int w, int h) {
+        return h / 500 + 1;
+    }
+
     @Override
     public void onCreate() {
         Log.i(TAG, "onCreate");
@@ -51,8 +63,9 @@ public class RdnWallpaper extends WallpaperService {
         SharedPreferences.OnSharedPreferenceChangeListener
     {
         private final long mFrameInterval = 50;
-        private final int mRes = 4;
-        private final int mRepeatY = 2;
+        private int mRes = 4;
+        private int mRepeatX = 1;
+        private int mRepeatY = 2;
         private final Paint mPaint = new Paint();
         private long mLastDrawTime;
         private int mWidth;
@@ -81,6 +94,9 @@ public class RdnWallpaper extends WallpaperService {
             paint.setStyle(Paint.Style.STROKE);
             paint.setFilterBitmap(true);
             paint.setTextSize(20);
+
+            PreferenceManager.setDefaultValues(RdnWallpaper.this,
+                    R.xml.prefs, false);
 
             mPrefs = PreferenceManager
                     .getDefaultSharedPreferences(RdnWallpaper.this);
@@ -115,7 +131,40 @@ public class RdnWallpaper extends WallpaperService {
 
         private void setParamsToPrefs() {
             int fn_idx = getFnIdx();
-            setParams(fn_idx, getParamsArray());
+            float[] p_arr = getParamsArray();
+            setParams(fn_idx, p_arr);
+
+            String s = "setParamsToPrefs="+fn_idx;
+            for(int i=0; i<p_arr.length; i++) {
+                s += ","+p_arr[i];
+            }
+            Log.i(TAG, s);
+
+            int newRes =
+                Integer.parseInt(mPrefs.getString("resolution", "0"));
+
+            int newRepeatX =
+                Integer.parseInt(mPrefs.getString("repeatX", "0"));
+
+            int newRepeatY =
+                Integer.parseInt(mPrefs.getString("repeatY", "0"));
+
+            Log.i(TAG, "res,rep="+newRes+","+newRepeatX+","+newRepeatY);
+            if(newRes     == 0) newRes     = getDefaultRes    (mWidth, mHeight);
+            if(newRepeatX == 0) newRepeatX = getDefaultRepeatX(mWidth, mHeight);
+            if(newRepeatY == 0) newRepeatY = getDefaultRepeatY(mWidth, mHeight);
+            Log.i(TAG, "     -> "+newRes+","+newRepeatX+","+newRepeatY);
+
+            if(
+                newRes != mRes ||
+                newRepeatX != mRepeatX ||
+                newRepeatY != mRepeatY
+            ) {
+                mRes = newRes;
+                mRepeatX = newRepeatX;
+                mRepeatY = newRepeatY;
+                reshapeGrid();
+            }
         }
 
         @Override
@@ -151,11 +200,23 @@ public class RdnWallpaper extends WallpaperService {
             super.onSurfaceChanged(holder, format, width, height);
             mWidth = width;
             mHeight = height;
-            mGridW = width / mRes;
-            mGridH = height / mRes / mRepeatY;
+
+            // might need to update resolution/tiling
+            setParamsToPrefs();
+
+            reshapeGrid();
+        }
+
+        private void reshapeGrid() {
+            mGridW = Math.max(4,  mWidth / mRes / mRepeatX);
+            mGridH = Math.max(4, mHeight / mRes / mRepeatY);
+            Log.i(TAG, "wh="+mWidth+","+mHeight);
+            Log.i(TAG, "grid="+mGridW+","+mGridH);
 
             mBitmap = Bitmap.createBitmap(mGridW, mGridH, Bitmap.Config.ARGB_8888);
 
+            // This will call renderFrame, which will automatically reallocate
+            // the JNI buffers.
             drawFrame();
         }
 
@@ -189,8 +250,9 @@ public class RdnWallpaper extends WallpaperService {
                     c.save();
                     c.scale(mRes, mRes);
                     mPaint.setFilterBitmap(true);
+                    for(int x = 0; x < mRepeatX; x++)
                     for(int y = 0; y < mRepeatY; y++) {
-                        c.drawBitmap(mBitmap, 0, y * mGridH, mPaint);
+                        c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
                     }
                     c.restore();
 

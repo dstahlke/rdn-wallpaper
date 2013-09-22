@@ -60,6 +60,13 @@ public class RdnPrefs extends PreferenceActivity implements
         // update dialog to reflect currently selected function
         updateFunction(false);
 
+        Display display = getWindowManager().getDefaultDisplay();
+        int w = display.getWidth();
+        int h = display.getHeight();
+        setListDefaultIfZero("resolution", RdnWallpaper.getDefaultRes(w, h));
+        setListDefaultIfZero("repeatX", RdnWallpaper.getDefaultRepeatX(w, h));
+        setListDefaultIfZero("repeatY", RdnWallpaper.getDefaultRepeatY(w, h));
+
         // This is a hack to trigger the sending of an onSharedPreferenceChanged
         // event, which causes RdnWallpaper to start running again (Android
         // pauses wallpapers when the settings dialog is opened).
@@ -68,9 +75,33 @@ public class RdnPrefs extends PreferenceActivity implements
         ed.apply();
     }
 
+    private void setListDefaultIfZero(String id, int val) {
+        SharedPreferences prefs = PreferenceManager
+                .getDefaultSharedPreferences(this);
+        if(prefs.getString(id, "0").equals("0")) {
+            ListPreference pref = (ListPreference)findPreference(id);
+            pref.setValue(""+val);
+        }
+    }
+
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
         Log.i(RdnWallpaper.TAG, "RdnPrefs.onSharedPreferenceChanged");
         updateFunction(true);
+
+        setListTitleToVal("function");
+        setListSummaryToVal("resolution");
+        setListSummaryToVal("repeatX");
+        setListSummaryToVal("repeatY");
+    }
+
+    private void setListTitleToVal(String id) {
+        ListPreference pref = (ListPreference)findPreference(id);
+        pref.setTitle(pref.getEntry());
+    }
+
+    private void setListSummaryToVal(String id) {
+        ListPreference pref = (ListPreference)findPreference(id);
+        pref.setSummary(pref.getEntry());
     }
 
     private void updateFunction(boolean allow_reset_grid) {
@@ -80,9 +111,6 @@ public class RdnPrefs extends PreferenceActivity implements
         if(f_id == mLastFunction) return;
         mLastFunction = f_id;
         Log.i(RdnWallpaper.TAG, "function id="+f_id);
-
-        ListPreference fn_pref = (ListPreference)findPreference("function");
-        fn_pref.setSummary(fn_pref.getEntry());
 
         PreferenceCategory sliders_box = (PreferenceCategory)findPreference("slider_params");
         sliders_box.removeAll();
