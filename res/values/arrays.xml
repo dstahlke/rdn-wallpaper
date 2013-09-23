@@ -22,6 +22,7 @@
         <item>p1</item>
         <item>uskate</item>
         <item>098,056</item>
+        <item>worms</item>
     </string-array>
 
     <array name="presets0_0">
@@ -63,6 +64,12 @@
     <array name="presets1_3">
         <item>0.1</item>
         <item>0.098</item>
+        <item>0.056</item>
+    </array>
+
+    <array name="presets1_4">
+        <item>0.08</item>
+        <item>0.0247</item>
         <item>0.056</item>
     </array>
 
