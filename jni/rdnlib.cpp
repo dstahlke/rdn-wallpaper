@@ -102,12 +102,12 @@ struct FunctionBase {
         LOGE("method get_seed_val must be overridden");
     }
 
-    virtual void set_params(float *p) {
+    virtual void set_params(float *p, int len) {
         LOGE("method set_params must be overridden");
     }
 
     virtual float get_dt() {
-        LOGE("method set_params must be overridden");
+        LOGE("method get_dt must be overridden");
     }
 
     virtual Palette *get_palette(int id) {
@@ -118,25 +118,29 @@ struct FunctionBase {
 struct GinzburgLandau : public FunctionBase {
     GinzburgLandau() :
         D(2.0F),
-        alpha( 0.9F),
-        beta (-2.5F)
+        alpha(0.0625F),
+        beta (1.0F   )
     { }
 
-    virtual void get_background_val(float &A, float &B) {
-        A = B = 0;
+    virtual void get_background_val(float &U, float &V) {
+        U = V = 0;
     }
 
-    virtual void get_seed_val(float &A, float &B, int seed_idx) {
-        switch(seed_idx % 2) {
-            case 0:  A = 0; B = 1; break;
-            default: A = 1; B = 0; break;
+    virtual void get_seed_val(float &U, float &V, int seed_idx) {
+        U = ((seed_idx*5)%7)/7.0F*2.0F-1.0F;
+        V = ((seed_idx*9)%13)/13.0F*2.0F-1.0F;
+    }
+
+    virtual void set_params(float *p, int len) {
+        if(len != 3) {
+            LOGE("params is wrong length: %d", len);
         }
-    }
-
-    virtual void set_params(float *p) {
-        D = p[0];
-        alpha = p[1];
-        beta = p[2];
+        D     = *(p++);
+        alpha = *(p++);
+        beta  = *(p++);
+        LOGE("D     = %f", D    );
+        LOGE("alpha = %f", alpha);
+        LOGE("beta  = %f", beta );
     }
 
     virtual float get_dt() {
@@ -145,34 +149,37 @@ struct GinzburgLandau : public FunctionBase {
     }
 
     virtual void compute_dx_dt(Grid &Gi, Grid &Go, int w, int h) {
-        float *Ai = Gi.getChannel(0);
-        float *Bi = Gi.getChannel(1);
-        float *Ao = Go.getChannel(0);
-        float *Bo = Go.getChannel(1);
+        float *Uibuf = Gi.getChannel(0);
+        float *Vibuf = Gi.getChannel(1);
+        float *Uobuf = Go.getChannel(0);
+        float *Vobuf = Go.getChannel(1);
         for(int y=0; y<h; y++) {
             int yl = y>  0 ? y-1 : h-1;
             int yr = y<h-1 ? y+1 :   0;
             for(int x=0; x<w; x++) {
                 int xl = x>  0 ? x-1 : w-1;
                 int xr = x<w-1 ? x+1 :   0;
-                float da =
-                    Ai[y *w + x ] * (-4) +
-                    Ai[yl*w + x ] +
-                    Ai[yr*w + x ] +
-                    Ai[y *w + xl] +
-                    Ai[y *w + xr];
-                float db =
-                    Bi[y *w + x ] * (-4) +
-                    Bi[yl*w + x ] +
-                    Bi[yr*w + x ] +
-                    Bi[y *w + xl] +
-                    Bi[y *w + xr];
-                float ai = Ai[y*w+x];
-                float bi = Bi[y*w+x];
-                float r2 = ai*ai + bi*bi;
+                float lU =
+                    Uibuf[y *w + x ] * (-4) +
+                    Uibuf[yl*w + x ] +
+                    Uibuf[yr*w + x ] +
+                    Uibuf[y *w + xl] +
+                    Uibuf[y *w + xr];
+                float lV =
+                    Vibuf[y *w + x ] * (-4) +
+                    Vibuf[yl*w + x ] +
+                    Vibuf[yr*w + x ] +
+                    Vibuf[y *w + xl] +
+                    Vibuf[y *w + xr];
+                float U = Uibuf[y*w+x];
+                float V = Vibuf[y*w+x];
+                float r2 = U*U + V*V;
 
-                Ao[y*w+x] = (1-r2)*ai + beta*r2*bi + D*(da - alpha*db);
-                Bo[y*w+x] = (1-r2)*bi - beta*r2*ai + D*(db + alpha*da);
+                Uobuf[y*w+x] = U - (U - beta*V)*r2 + D*(lU - alpha*lV);
+                Vobuf[y*w+x] = V - (V + beta*U)*r2 + D*(lV + alpha*lU);
+                // From Ready (https://code.google.com/p/reaction-diffusion)
+                //Uobuf[y*w+x] = DU*lU + alpha*U - gamma*V + (-beta*U + delta*V)*r2;
+                //Vobuf[y*w+x] = DV*lV + alpha*V + gamma*U + (-beta*V - delta*U)*r2;
             }
         }
     }
@@ -205,7 +212,10 @@ struct GrayScott : public FunctionBase {
         B = ((seed_idx*9)%13)/13.0F;
     }
 
-    virtual void set_params(float *p) {
+    virtual void set_params(float *p, int len) {
+        if(len != 3) {
+            LOGE("params is wrong length: %d", len);
+        }
         D = p[0];
         F = p[1];
         k = p[2];
@@ -397,7 +407,8 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
     fn = fn_list[fn_idx];
     pal = fn->get_palette(0);
     jfloat *params = env->GetFloatArrayElements(params_in, NULL);
-    fn->set_params((float *)params);
+    jsize len = env->GetArrayLength(params_in);
+    fn->set_params((float *)params, len);
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
     //rdn->reset_grid();
 }

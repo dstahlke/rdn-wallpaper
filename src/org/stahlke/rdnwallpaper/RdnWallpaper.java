@@ -13,8 +13,6 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 
-import java.util.Random;
-
 public class RdnWallpaper extends WallpaperService {
     public static final String TAG = "rdn";
 
@@ -75,8 +73,6 @@ public class RdnWallpaper extends WallpaperService {
         private Bitmap mBitmap;
         private SharedPreferences mPrefs;
 
-        private Random mRng = new Random();
-
         private final Runnable mDrawCallback = new Runnable() {
             public void run() {
                 drawFrame();
@@ -119,14 +115,15 @@ public class RdnWallpaper extends WallpaperService {
 
         private float[] getParamsArray() {
             int fn_idx = getFnIdx();
-
-            // FIXME
-            float[] params = new float[] {
-                mPrefs.getFloat("param_"+fn_idx+"_0", 0),
-                mPrefs.getFloat("param_"+fn_idx+"_1", 0),
-                mPrefs.getFloat("param_"+fn_idx+"_2", 0)
-            };
-            return params;
+            int len=0;
+            for(len=0; ; len++) {
+                if(!mPrefs.contains("param_"+fn_idx+"_"+len)) break;
+            }
+            float[] ret = new float[len];
+            for(int i=0; i<len; i++) {
+                ret[i] = mPrefs.getFloat("param_"+fn_idx+"_"+i, 0);
+            }
+            return ret;
         }
 
         private void setParamsToPrefs() {

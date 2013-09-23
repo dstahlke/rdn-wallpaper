@@ -12,9 +12,9 @@
     </string-array>
 
     <string-array name="presets0">
-        <item>foo</item>
-        <item>bar</item>
-        <item>baz</item>
+        <item>A</item>
+        <item>B</item>
+        <item>C</item>
     </string-array>
 
     <string-array name="presets1">
