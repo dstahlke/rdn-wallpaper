@@ -71,7 +71,7 @@ public:
         for(int x = 0; x < G.w; x++) {
             int red   = (int)((1-gridA[x]) * 200);
             int green = (int)(gridDA[x] * 20000);
-            int blue  = (int)(gridB [x] * 2000);
+            int blue  = (int)(gridB [x] * 1000);
 
             if(red < 0) red = 0;
             if(red > 255) red = 255;
@@ -306,7 +306,7 @@ struct RdnGrids {
     }
 
     void step(FunctionBase *fn) {
-        for(int iter=0; iter<7; iter++) {
+        for(int iter=0; iter<15; iter++) {
             fn->compute_dx_dt(gridY, gridK1, w, h);
 
             //float max = 0;
