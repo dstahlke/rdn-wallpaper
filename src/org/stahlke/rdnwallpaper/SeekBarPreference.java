@@ -161,6 +161,35 @@ public class SeekBarPreference extends Preference {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            Paint p = new Paint();
+            float step = 0.2F;
+            float radius = 0.4F*w;
+            float theta0 = (mCurrentValue / mStepValue / radius) % step;
+            if(theta0 > 0) theta0 -= step;
+            float px = -1;
+            int idx = 0;
+            for(float theta=theta0; theta<Math.PI+step; theta+=step) {
+                double th_clip = Math.min(Math.PI, Math.max(0, theta));
+                float x = w*0.5F - radius*(float)Math.cos(th_clip);
+                int c0 = (int)(64*Math.sin(th_clip));
+                int c1 = (int)(128*Math.sin(th_clip));
+                //canvas.drawLine(x, h/2-10, x, h/2+10, p);
+                if(px >= 0) {
+                    //canvas.drawLine(px, h/2-10, x, h/2-10, p);
+                    //canvas.drawLine(px, h/2+10, x, h/2+10, p);
+                    p.setStyle(Paint.Style.FILL);
+                    int c = (idx%2==0) ? 255 : 192;
+                    p.setARGB(c0, c, c, c);
+                    canvas.drawRect(px, h/2-10, x, h/2+10, p);
+                    p.setStyle(Paint.Style.STROKE);
+                    p.setARGB(c1, 255, 255, 255);
+                    canvas.drawRect(px, h/2-10, x, h/2+10, p);
+                }
+                px = x;
+                idx++;
+            }
             String text = String.format(mFormat, mCurrentValue);
             canvas.drawText(text, getPaddingLeft(), getPaddingTop() - mAscent,
                     mTextPaint);
