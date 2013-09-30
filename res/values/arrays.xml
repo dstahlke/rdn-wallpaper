@@ -73,6 +73,15 @@
         <item>0.056</item>
     </array>
 
+    <string-array name="palettes0">
+        <item>A</item>
+        <item>B</item>
+    </string-array>
+
+    <string-array name="palettes1">
+        <item>A</item>
+    </string-array>
+
     <string-array name="resolution_labels">
         <item>1</item>
         <item>2</item>

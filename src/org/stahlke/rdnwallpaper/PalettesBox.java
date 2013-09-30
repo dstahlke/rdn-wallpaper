@@ -2,6 +2,8 @@ package org.stahlke.rdnwallpaper;
 
 import java.util.List;
 
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.content.Context;
@@ -16,7 +18,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.*;
 
-public class PresetsBox extends Preference {
+public class PalettesBox extends Preference {
     private final String TAG = getClass().getName();
 
     private static final String ANDROIDNS="http://schemas.android.com/apk/res/android";
@@ -24,14 +26,14 @@ public class PresetsBox extends Preference {
     private Context mContext;
     private LinearLayout mButtonsBox;
     private int mFnId;
-    private List<SeekBarPreference> mSliders;
+    private SharedPreferences mPrefs;
 
-    public PresetsBox(Context context, AttributeSet attrs) {
+    public PalettesBox(Context context, AttributeSet attrs) {
         super(context, attrs);
         initPreference(context, attrs);
     }
 
-    public PresetsBox(Context context, AttributeSet attrs, int defStyle) {
+    public PalettesBox(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
         initPreference(context, attrs);
     }
@@ -39,18 +41,24 @@ public class PresetsBox extends Preference {
     private void initPreference(Context context, AttributeSet attrs) {
         mContext = context;
         mButtonsBox = new LinearLayout(context, attrs);
+
+        mPrefs = PreferenceManager
+                .getDefaultSharedPreferences(context);
+        // FIXME - highlight selected palette button
+        //mPrefs.registerOnSharedPreferenceChangeListener(this);
+
         setFunction(0);
     }
 
     public void setFunction(int f_id) {
         mFnId = f_id;
 
-        String[] preset_labels = mContext.getResources().getStringArray(
+        String[] labels = mContext.getResources().getStringArray(
                 mContext.getResources().getIdentifier(
-                    "presets"+mFnId, "array", mContext.getPackageName()));
+                    "palettes"+mFnId, "array", mContext.getPackageName()));
 
         mButtonsBox.removeAllViews();
-        for(int i=0; i<preset_labels.length; i++) {
+        for(int i=0; i<labels.length; i++) {
             Button b = new Button(mContext);
             final int ii = i;
             b.setOnClickListener(new View.OnClickListener() {
@@ -58,29 +66,16 @@ public class PresetsBox extends Preference {
                     buttonClicked(ii);
                 }
             });
-            b.setText(preset_labels[i]);
+            b.setText(labels[i]);
             mButtonsBox.addView(b);
         }
     }
 
-    public void setSliders(List<SeekBarPreference> sliders) {
-        mSliders = sliders;
-    }
-
     protected void buttonClicked(int i) {
-        Log.i(TAG, "preset button clicked: "+i);
-
-        TypedArray preset_vals = mContext.getResources().obtainTypedArray(
-                mContext.getResources().getIdentifier(
-                    "presets"+mFnId+"_"+i, "array", mContext.getPackageName()));
-
-        for(int j=0; j<mSliders.size(); j++) {
-            float val = preset_vals.getFloat(j, 0);
-            Log.i(TAG, "slider["+j+"]="+val);
-            mSliders.get(j).setValue(val);
-        }
-
-        RdnWallpaper.resetGrid();
+        Log.i(TAG, "palette button clicked: "+i);
+        SharedPreferences.Editor ed = mPrefs.edit();
+        ed.putInt("palette"+mFnId, i);
+        ed.apply();
     }
 
     @Override
@@ -94,7 +89,7 @@ public class PresetsBox extends Preference {
             layout = mInflater.inflate(
                 R.layout.pref_buttons_container, parent, false);
         } catch(Exception e) {
-            Log.e(TAG, "Error creating presets box", e);
+            Log.e(TAG, "Error creating palettes box", e);
         }
 
         return layout;

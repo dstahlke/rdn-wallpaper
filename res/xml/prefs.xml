@@ -71,6 +71,12 @@
             android:title="Presets"
             />
     </PreferenceCategory>
+    <PreferenceCategory android:title="Palettes">
+        <org.stahlke.rdnwallpaper.PalettesBox
+            android:key="palettes_box"
+            android:title="palettes"
+            />
+    </PreferenceCategory>
     <PreferenceCategory
         android:title="Performance"
         >

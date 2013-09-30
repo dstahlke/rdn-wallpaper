@@ -36,9 +36,16 @@ public:
     virtual void render_line(uint32_t *pix_line, Grid &G, Grid &DG, int y);
 };
 
-class PaletteGL : public Palette {
+class PaletteGL0 : public Palette {
 public:
     void render_line(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
+        if(y == 0) {
+            avg_rv = accum_rv / cnt;
+            avg_rk = accum_rk / cnt;
+            accum_rv = 0;
+            accum_rk = 0;
+            cnt = 0;
+        }
         float *gridA = G.getChannel(0) + y * G.w;
         float *gridB = G.getChannel(1) + y * G.w;
         float *gridDA = DG.getChannel(0) + y * G.w;
@@ -46,8 +53,12 @@ public:
         for(int x = 0; x < G.w; x++) {
             float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
             float rk = gridDA[x]*gridDA[x] + gridDB[x]*gridDB[x];
-            int red   = (int)((rv-rk/4) * 200);
-            int green = (int)((rv-rk/2) * 200);
+            accum_rv += rv;
+            accum_rk += rk;
+            rv /= avg_rv;
+            rk /= avg_rk;
+            int red   = (int)((rv-rk/4) * 150);
+            int green = (int)((rv-rk/2) * 100);
             int blue  = green + (int)(gridA[x] * 30);
 
             if(red < 0) red = 0;
@@ -58,7 +69,53 @@ public:
             if(blue > 255) blue = 255;
             pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
         }
+        cnt += G.w;
     }
+
+    int cnt;
+    float accum_rv, accum_rk;
+    float avg_rv, avg_rk;
+};
+
+class PaletteGL1 : public Palette {
+public:
+    void render_line(uint32_t *pix_line, Grid &G, Grid &DG, int y) {
+        if(y == 0) {
+            avg_rv = accum_rv / cnt;
+            avg_rk = accum_rk / cnt;
+            accum_rv = 0;
+            accum_rk = 0;
+            cnt = 0;
+        }
+        float *gridA = G.getChannel(0) + y * G.w;
+        float *gridB = G.getChannel(1) + y * G.w;
+        float *gridDA = DG.getChannel(0) + y * G.w;
+        float *gridDB = DG.getChannel(1) + y * G.w;
+        for(int x = 0; x < G.w; x++) {
+            float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
+            float rk = gridA[x]*gridDA[x] + gridB[x]*gridDB[x];
+            accum_rv += rv;
+            accum_rk += fabs(rk);
+            rv /= avg_rv;
+            rk /= avg_rk;
+            int red   = (int)(rv * 100);
+            int green = (int)(-rk * 30);
+            int blue  = green;
+
+            if(red < 0) red = 0;
+            if(red > 255) red = 255;
+            if(green < 0) green = 0;
+            if(green > 255) green = 255;
+            if(blue < 0) blue = 0;
+            if(blue > 255) blue = 255;
+            pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+        }
+        cnt += G.w;
+    }
+
+    int cnt;
+    float accum_rv, accum_rk;
+    float avg_rv, avg_rk;
 };
 
 class PaletteGS : public Palette {
@@ -84,7 +141,8 @@ public:
     }
 };
 
-Palette *pal_gl = new PaletteGL();
+Palette *pal_gl0 = new PaletteGL0();
+Palette *pal_gl1 = new PaletteGL1();
 Palette *pal_gs = new PaletteGS();
 
 struct FunctionBase {
@@ -185,7 +243,11 @@ struct GinzburgLandau : public FunctionBase {
     }
 
     virtual Palette *get_palette(int id) {
-        return pal_gl;
+        switch(id) {
+            case 0: return pal_gl0;
+            case 1: return pal_gl1;
+            default: return pal_gl0;
+        }
     }
 
     float D, alpha, beta;
@@ -306,7 +368,7 @@ struct RdnGrids {
     }
 
     void step(FunctionBase *fn) {
-        for(int iter=0; iter<15; iter++) {
+        for(int iter=0; iter<5; iter++) {
             fn->compute_dx_dt(gridY, gridK1, w, h);
 
             //float max = 0;
@@ -366,7 +428,7 @@ extern "C" {
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
         JNIEnv *env, jobject obj, jobject bitmap);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
-        JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params);
+        JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params, jint pal);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(
         JNIEnv *env, jobject obj);
 };
@@ -402,10 +464,10 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
-    JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params_in
+    JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params_in, jint pal_idx
 ) {
     fn = fn_list[fn_idx];
-    pal = fn->get_palette(0);
+    pal = fn->get_palette(pal_idx);
     jfloat *params = env->GetFloatArrayElements(params_in, NULL);
     jsize len = env->GetArrayLength(params_in);
     fn->set_params((float *)params, len);

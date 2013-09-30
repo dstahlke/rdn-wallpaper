@@ -122,6 +122,9 @@ public class RdnPrefs extends PreferenceActivity implements
         presets_box.setFunction(f_id);
         presets_box.setSliders(sliders.get(f_id));
 
+        PalettesBox palettes_box = (PalettesBox)findPreference("palettes_box");
+        palettes_box.setFunction(f_id);
+
         if(allow_reset_grid) {
             RdnWallpaper.resetGrid();
         }

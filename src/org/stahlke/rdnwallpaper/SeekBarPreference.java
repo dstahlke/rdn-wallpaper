@@ -38,6 +38,11 @@ public class SeekBarPreference extends Preference {
         private Paint mTextPaint;
         private int mAscent;
         private float mLastTouchX;
+        private float mInitialTouchX;
+        private float mInitialTouchY;
+        private boolean mNoVertScroll;
+        private float mInitialTouchVal;
+        private boolean isDragging;
 
         public TheView(Context context, AttributeSet attrs) {
             super(context, attrs);
@@ -47,8 +52,8 @@ public class SeekBarPreference extends Preference {
         private final void init() {
             mTextPaint = new Paint();
             mTextPaint.setAntiAlias(true);
-            mTextPaint.setTextSize(32);
-            mTextPaint.setColor(0xFF00FF00);
+            mTextPaint.setTextSize(24);
+            mTextPaint.setStrokeWidth(2);
             setPadding(3, 3, 3, 3);
         }
 
@@ -107,12 +112,14 @@ public class SeekBarPreference extends Preference {
             switch(action) {
                 case MotionEvent.ACTION_DOWN:
                 case MotionEvent.ACTION_MOVE:
+                    isDragging = true;
                     if(getParent() != null) {
                         getParent().requestDisallowInterceptTouchEvent(true);
                     }
                     break;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    isDragging = false;
                     if(getParent() != null) {
                         getParent().requestDisallowInterceptTouchEvent(false);
                     }
@@ -123,10 +130,28 @@ public class SeekBarPreference extends Preference {
 
             if(action == MotionEvent.ACTION_DOWN) {
                 mLastTouchX = ev.getX();
+                mInitialTouchX = ev.getX();
+                mInitialTouchY = ev.getY();
+                mNoVertScroll = false;
+                mInitialTouchVal = mCurrentValue;
             } else if(
                 action == MotionEvent.ACTION_MOVE ||
                 action == MotionEvent.ACTION_UP
             ) {
+                // Lots of horizontal motion - disable vertical scroll.
+                if(Math.abs(ev.getX() - mInitialTouchX) > 20) {
+                    mNoVertScroll = true;
+                }
+                // Forward vertical scroll to parent, and reset any change that the small
+                // amount of horizontal scroll may have done.
+                if(!mNoVertScroll && Math.abs(ev.getY() - mInitialTouchY) > 20) {
+                    isDragging = false;
+                    setValue(mInitialTouchVal);
+                    notifyChanged();
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                    return false;
+                }
+
                 float delta = ev.getX() - mLastTouchX;
                 mLastTouchX = ev.getX();
 
@@ -161,7 +186,43 @@ public class SeekBarPreference extends Preference {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            Paint p = new Paint();
+            float step = 0.2F;
+            float radius = 0.4F*w;
+            float theta0 = (mCurrentValue / mStepValue / radius) % step;
+            if(theta0 > 0) theta0 -= step;
+            float px = -1;
+            int idx = 0;
+            for(float theta=theta0; theta<Math.PI+step; theta+=step) {
+                double th_clip = Math.min(Math.PI, Math.max(0, theta));
+                float x = w*0.5F - radius*(float)Math.cos(th_clip);
+                double sin = Math.sin(th_clip);
+                int c0 = (int)((isDragging ?  96 :  64)*sin);
+                int c1 = (int)((isDragging ? 192 : 128)*sin);
+                if(px >= 0) {
+                    p.setStyle(Paint.Style.FILL);
+                    int c = (idx%2==0) ? 255 : 128;
+                    p.setARGB(c0, c, c, c);
+                    canvas.drawRect(px, h/2-10, x, h/2+10, p);
+                    p.setStyle(Paint.Style.STROKE);
+                    p.setARGB(c1, 255, 255, 255);
+                    canvas.drawRect(px, h/2-10, x, h/2+10, p);
+                }
+                px = x;
+                idx++;
+            }
+
             String text = String.format(mFormat, mCurrentValue);
+
+            mTextPaint.setColor(0x7F000000);
+            mTextPaint.setStyle(Paint.Style.STROKE);
+            canvas.drawText(text, getPaddingLeft(), getPaddingTop() - mAscent,
+                    mTextPaint);
+
+            mTextPaint.setColor(0xFF00FF00);
+            mTextPaint.setStyle(Paint.Style.FILL);
             canvas.drawText(text, getPaddingLeft(), getPaddingTop() - mAscent,
                     mTextPaint);
         }
