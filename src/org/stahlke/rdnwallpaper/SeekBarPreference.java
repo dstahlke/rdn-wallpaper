@@ -38,6 +38,10 @@ public class SeekBarPreference extends Preference {
         private Paint mTextPaint;
         private int mAscent;
         private float mLastTouchX;
+        private float mInitialTouchX;
+        private float mInitialTouchY;
+        private boolean mNoVertScroll;
+        private float mInitialTouchVal;
 
         public TheView(Context context, AttributeSet attrs) {
             super(context, attrs);
@@ -123,10 +127,27 @@ public class SeekBarPreference extends Preference {
 
             if(action == MotionEvent.ACTION_DOWN) {
                 mLastTouchX = ev.getX();
+                mInitialTouchX = ev.getX();
+                mInitialTouchY = ev.getY();
+                mNoVertScroll = false;
+                mInitialTouchVal = mCurrentValue;
             } else if(
                 action == MotionEvent.ACTION_MOVE ||
                 action == MotionEvent.ACTION_UP
             ) {
+                // Lots of horizontal motion - disable vertical scroll.
+                if(Math.abs(ev.getX() - mInitialTouchX) > 20) {
+                    mNoVertScroll = true;
+                }
+                // Forward vertical scroll to parent, and reset any change that the small
+                // amount of horizontal scroll may have done.
+                if(!mNoVertScroll && Math.abs(ev.getY() - mInitialTouchY) > 20) {
+                    setValue(mInitialTouchVal);
+                    notifyChanged();
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                    return false;
+                }
+
                 float delta = ev.getX() - mLastTouchX;
                 mLastTouchX = ev.getX();
 
