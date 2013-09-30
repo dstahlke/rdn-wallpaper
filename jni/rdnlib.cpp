@@ -306,7 +306,7 @@ struct RdnGrids {
     }
 
     void step(FunctionBase *fn) {
-        for(int iter=0; iter<15; iter++) {
+        for(int iter=0; iter<5; iter++) {
             fn->compute_dx_dt(gridY, gridK1, w, h);
 
             //float max = 0;
