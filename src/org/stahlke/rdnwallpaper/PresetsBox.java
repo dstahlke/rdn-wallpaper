@@ -79,6 +79,8 @@ public class PresetsBox extends Preference {
             Log.i(TAG, "slider["+j+"]="+val);
             mSliders.get(j).setValue(val);
         }
+
+        RdnWallpaper.resetGrid();
     }
 
     @Override
