@@ -18,7 +18,7 @@ public class RdnWallpaper extends WallpaperService {
 
     // jni method
     public static native void renderFrame(Bitmap bitmap);
-    public static native void setParams(int fn_idx, float[] params);
+    public static native void setParams(int fn_idx, float[] params, int pal_idx);
     public static native void resetGrid();
 
     static {
@@ -129,13 +129,17 @@ public class RdnWallpaper extends WallpaperService {
         private void setParamsToPrefs() {
             int fn_idx = getFnIdx();
             float[] p_arr = getParamsArray();
-            setParams(fn_idx, p_arr);
 
             String s = "setParamsToPrefs="+fn_idx;
             for(int i=0; i<p_arr.length; i++) {
                 s += ","+p_arr[i];
             }
             Log.i(TAG, s);
+
+            int pal = mPrefs.getInt("palette"+fn_idx, 0);
+            Log.i(TAG, "palette="+pal);
+
+            setParams(fn_idx, p_arr, pal);
 
             int newRes =
                 Integer.parseInt(mPrefs.getString("resolution", "0"));
