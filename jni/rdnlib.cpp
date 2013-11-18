@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <utility>
 
 #include <android/log.h>
 #include <android/bitmap.h>
@@ -27,6 +28,30 @@ struct Grid {
         return A + wh*i;
     }
 
+    int detectCheckerBoard() {
+        float limit = 0.001;
+        float la = -limit;
+        float lb =  limit;
+        int instable = 0;
+        for(int j=0; j<n; j++) {
+            float *p = getChannel(j);
+            int l = wh-3-3*w;
+            int w2 = w*2;
+            int w3 = w*3;
+            for(int i=0; i<l; i++) {
+                if(
+            p[i   ] < la && p[i+1   ] > lb && p[i+2   ] < la && // p[i+3   ] > lb &&
+            p[i+w ] > lb && p[i+1+w ] < la && p[i+2+w ] > lb && // p[i+3+w ] < la &&
+            p[i+w2] < la && p[i+1+w2] > lb && p[i+2+w2] < la // && p[i+3+w2] > lb &&
+            //p[i+w3] > lb && p[i+1+w3] < la && p[i+2+w3] > lb && p[i+3+w3] < la
+                ) {
+                    instable++;
+                }
+            }
+        }
+        return instable;
+    }
+
     void fixCheckerBoard() {
         for(int chan=0; chan<n; chan++) {
             float *p = getChannel(chan);
@@ -36,13 +61,12 @@ struct Grid {
                 for(int x=0; x<w; x++) {
                     int xl = x>  0 ? x-1 : w-1;
                     int xr = x<w-1 ? x+1 :   0;
-                    p[y*w + x] = (
-                        p[y *w + x ] * 4 +
+                    p[y*w + x] = p[y*w + x] * 0.9 + (
                         p[yl*w + x ] +
                         p[yr*w + x ] +
                         p[y *w + xl] +
                         p[y *w + xr]
-                    ) / 8;
+                    ) * 0.25 * 0.1;
                 }
             }
         }
@@ -113,7 +137,7 @@ public:
             float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
             float rk = gridA[x]*gridDA[x] + gridB[x]*gridDB[x];
             accum_rv += rv;
-            accum_rk += fabs(rk);
+            accum_rk += fabsf(rk);
             rv /= avg_rv;
             rk /= avg_rk;
             int red   = (int)(rv * 100);
@@ -154,7 +178,7 @@ Palette *pal_gs = new PaletteGS();
 struct FunctionBase {
     virtual ~FunctionBase() { }
 
-    virtual void compute_dx_dt(Grid &Gi, Grid &Go, int w, int h) {
+    virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
         LOGE("method compute_dx_dt must be overridden");
     }
 
@@ -209,42 +233,29 @@ struct GinzburgLandau : public FunctionBase {
 
     virtual float get_dt() {
         // Stability condition determined by experimentation.
-        return 0.1f / D / (1 + fabs(alpha));
+        return 0.1f / D / (1 + fabsf(alpha));
     }
 
-    virtual void compute_dx_dt(Grid &Gi, Grid &Go, int w, int h) {
-        float *Uibuf = Gi.getChannel(0);
-        float *Vibuf = Gi.getChannel(1);
-        float *Uobuf = Go.getChannel(0);
-        float *Vobuf = Go.getChannel(1);
-        for(int y=0; y<h; y++) {
-            int yl = y>  0 ? y-1 : h-1;
-            int yr = y<h-1 ? y+1 :   0;
-            for(int x=0; x<w; x++) {
-                int xl = x>  0 ? x-1 : w-1;
-                int xr = x<w-1 ? x+1 :   0;
-                float lU =
-                    Uibuf[y *w + x ] * (-4) +
-                    Uibuf[yl*w + x ] +
-                    Uibuf[yr*w + x ] +
-                    Uibuf[y *w + xl] +
-                    Uibuf[y *w + xr];
-                float lV =
-                    Vibuf[y *w + x ] * (-4) +
-                    Vibuf[yl*w + x ] +
-                    Vibuf[yr*w + x ] +
-                    Vibuf[y *w + xl] +
-                    Vibuf[y *w + xr];
-                float U = Uibuf[y*w+x];
-                float V = Vibuf[y*w+x];
-                float r2 = U*U + V*V;
+    virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
+        float *Uibuf = Gi.getChannel(0) + y*w;
+        float *Vibuf = Gi.getChannel(1) + y*w;
+        float *Uobuf = Go.getChannel(0) + y*w;
+        float *Vobuf = Go.getChannel(1) + y*w;
+        float *Ulbuf = Gl.getChannel(0) + y*w;
+        float *Vlbuf = Gl.getChannel(1) + y*w;
 
-                Uobuf[y*w+x] = U - (U - beta*V)*r2 + D*(lU - alpha*lV);
-                Vobuf[y*w+x] = V - (V + beta*U)*r2 + D*(lV + alpha*lU);
-                // From Ready (https://code.google.com/p/reaction-diffusion)
-                //Uobuf[y*w+x] = DU*lU + alpha*U - gamma*V + (-beta*U + delta*V)*r2;
-                //Vobuf[y*w+x] = DV*lV + alpha*V + gamma*U + (-beta*V - delta*U)*r2;
-            }
+        for(int x=0; x<w; x++) {
+            float lU = Ulbuf[x];
+            float lV = Vlbuf[x];
+            float  U = Uibuf[x];
+            float  V = Vibuf[x];
+            float r2 = U*U + V*V;
+
+            Uobuf[x] = U - (U - beta*V)*r2 + D*(lU - alpha*lV);
+            Vobuf[x] = V - (V + beta*U)*r2 + D*(lV + alpha*lU);
+            // From Ready (https://code.google.com/p/reaction-diffusion)
+            //Uobuf[x] = DU*lU + alpha*U - gamma*V + (-beta*U + delta*V)*r2;
+            //Vobuf[x] = DV*lV + alpha*V + gamma*U + (-beta*V - delta*U)*r2;
         }
     }
 
@@ -294,37 +305,24 @@ struct GrayScott : public FunctionBase {
         return 0.3f / D;
     }
 
-    virtual void compute_dx_dt(Grid &Gi, Grid &Go, int w, int h) {
-        float *Ai = Gi.getChannel(0);
-        float *Bi = Gi.getChannel(1);
-        float *Ao = Go.getChannel(0);
-        float *Bo = Go.getChannel(1);
-        for(int y=0; y<h; y++) {
-            int yl = y>  0 ? y-1 : h-1;
-            int yr = y<h-1 ? y+1 :   0;
-            for(int x=0; x<w; x++) {
-                int xl = x>  0 ? x-1 : w-1;
-                int xr = x<w-1 ? x+1 :   0;
-                float da =
-                    Ai[y *w + x ] * (-4) +
-                    Ai[yl*w + x ] +
-                    Ai[yr*w + x ] +
-                    Ai[y *w + xl] +
-                    Ai[y *w + xr];
-                float db =
-                    Bi[y *w + x ] * (-4) +
-                    Bi[yl*w + x ] +
-                    Bi[yr*w + x ] +
-                    Bi[y *w + xl] +
-                    Bi[y *w + xr];
-                float ai = Ai[y*w+x];
-                float bi = Bi[y*w+x];
+    virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
+        float *Ai = Gi.getChannel(0) + y*w;
+        float *Bi = Gi.getChannel(1) + y*w;
+        float *Ao = Go.getChannel(0) + y*w;
+        float *Bo = Go.getChannel(1) + y*w;
+        float *Al = Gl.getChannel(0) + y*w;
+        float *Bl = Gl.getChannel(1) + y*w;
 
-                //Ao[y*w+x] = 1 - ai - mu*ai*bi*bi + D*da;
-                //Bo[y*w+x] = mu*ai*bi*bi - phi*bi + D*db;
-                Ao[y*w+x] = 2*D*da - ai*bi*bi + F*(1-ai);
-                Bo[y*w+x] =   D*db + ai*bi*bi - (F+k)*bi;
-            }
+        for(int x=0; x<w; x++) {
+            float da = Al[x];
+            float db = Bl[x];
+            float ai = Ai[x];
+            float bi = Bi[x];
+
+            //Ao[x] = 1 - ai - mu*ai*bi*bi + D*da;
+            //Bo[x] = mu*ai*bi*bi - phi*bi + D*db;
+            Ao[x] = 2*D*da - ai*bi*bi + F*(1-ai);
+            Bo[x] =   D*db + ai*bi*bi - (F+k)*bi;
         }
     }
 
@@ -338,12 +336,22 @@ struct GrayScott : public FunctionBase {
 struct RdnGrids {
     RdnGrids(int _w, int _h) :
         w(_w), h(_h),
-        dt(0.01), since_instable(10000),
-        gridY  (w, h, 2),
-        gridK1 (w, h, 2),
-        gridK2 (w, h, 2),
-        gridTmp(w, h, 2)
-    { }
+        gridY(w, h, 2),
+        gridK(w, h, 2),
+        gridL(w, h, 2)
+    {
+        reset_dt();
+        reset_cur_instable();
+    }
+
+    void reset_dt() {
+        cur_dt = 0.01;
+    }
+
+    // Allow dt to rapidly rise again
+    void reset_cur_instable() {
+        since_instable = 10000;
+    }
 
     void reset_grid(FunctionBase *fn) {
         float A, B;
@@ -373,76 +381,73 @@ struct RdnGrids {
             }
         }
 
-        dt = 0.01;
-        since_instable = 10000;
+        reset_dt();
+        reset_cur_instable();
     }
 
-    int step_inner(FunctionBase *fn, float step_dt) {
-        fn->compute_dx_dt(gridY, gridK1, w, h);
-
-        //int second_order = 0;
-        //if(second_order) {
-        //    for(int i=0; i<gridY.whn; i++) {
-        //        gridTmp.A[i] = gridY.A[i] + gridK1.A[i] * step_dt/2;
-        //    }
-        //    fn->compute_dx_dt(gridTmp, gridK2, w, h);
-        //    for(int i=0; i<gridY.whn; i++) {
-        //        gridY.A[i] += gridK2.A[i] * step_dt;
-        //    }
-        //} else {
-
-        float limit = 0.001 / step_dt;
-        int instable = 0;
-        for(int j=0; j<gridY.n; j++) {
-            float *p = gridK1.getChannel(j);
-            int l = gridY.wh-2-2*gridY.w;
-            int w2 = w+w;
-            for(int i=0; i<l; i++) {
-                if(
-                    p[i   ] < limit && p[i+1   ] > limit && p[i+2   ] < limit &&
-                    p[i+w ] > limit && p[i+1+w ] < limit && p[i+2+w ] > limit &&
-                    p[i+w2] < limit && p[i+1+w2] > limit && p[i+2+w2] < limit
-                ) {
-                    instable++;
-                    //LOGI("pixel=%g", p[i]);
-                    break;
+    void compute_laplacian() {
+        for(int y=0; y<h; y++) {
+            for(int chan=0; chan<gridY.n; chan++) {
+                float *Ybuf = gridY.getChannel(chan);
+                float *Lbuf = gridL.getChannel(chan);
+                int yl = y>  0 ? y-1 : h-1;
+                int yr = y<h-1 ? y+1 :   0;
+                for(int x=0; x<w; x++) {
+                    int xl = x>  0 ? x-1 : w-1;
+                    int xr = x<w-1 ? x+1 :   0;
+                    Lbuf[y*w+x] =
+                        Ybuf[y *w + x ] * (-4) +
+                        Ybuf[yl*w + x ] +
+                        Ybuf[yr*w + x ] +
+                        Ybuf[y *w + xl] +
+                        Ybuf[y *w + xr];
                 }
             }
         }
-        for(int i=0; i<gridY.whn; i++) {
-            gridY.A[i] += gridK1.A[i] * step_dt;
+    }
+
+    // compute laplacian before calling this
+    float step_inner(FunctionBase *fn, float step_dt) {
+        for(int y=0; y<h; y++) {
+            fn->compute_dx_dt(gridY, gridK, gridL, w, y);
         }
 
-        return instable;
+        float limit_d = 0.5;
+
+        for(int i=0; i<gridY.whn; i++) {
+            float d = gridK.A[i] * step_dt;
+            float ad = fabsf(d);
+            if(ad > limit_d) {
+                step_dt *= limit_d / ad;
+                LOGI("ad=%g dt=%g", ad, step_dt);
+                d = (d>0) ? limit_d : -limit_d;
+            }
+
+            gridY.A[i] += d;
+        }
+
+        return step_dt;
     }
 
     void step(FunctionBase *fn) {
         for(int iter=0; iter<5; iter++) {
-            int instable = step_inner(fn, dt);
-
-            if(instable) {
-                LOGI("dt=%g si=%d", dt, since_instable);
-                dt *= 0.99;
-                LOGI("-> dt=%g", dt);
+            compute_laplacian();
+            while(gridL.detectCheckerBoard()) {
+                LOGI("cur_dt=%g si=%d", cur_dt, since_instable);
+                cur_dt *= 0.99;
                 gridY.fixCheckerBoard();
-                // FIXME: could freeze UI:
-                while(step_inner(fn, dt / 5.0)) {
-                    dt *= 0.99;
-                    LOGI("-> dt=%g", dt);
-                }
+                compute_laplacian();
                 since_instable = 0;
-            } else {
-                since_instable++;
-                if(since_instable > 1000) {
-                    dt *= 1.01;
-                } else {
-                    dt *= 1.0001;
-                }
             }
 
-            // FIXME: tie to reset_grid or something?
-            if(dt < 1e-6) dt = 1e-6;
-            if(dt > 1e+1) dt = 1e+1;
+            since_instable++;
+            if(since_instable > 1000) {
+                cur_dt *= 1.05;
+            } else {
+                cur_dt *= 1.0001;
+            }
+
+            cur_dt = step_inner(fn, cur_dt);
 
             if(!isfinite(gridY.getChannel(0)[0])) {
                 reset_grid(fn);
@@ -450,23 +455,22 @@ struct RdnGrids {
         }
         //LOGI("pixel=%g,%g,%g,%g",
         //    gridY.getChannel(0)[0], gridY.getChannel(1)[0],
-        //    gridK1.getChannel(0)[0], gridK1.getChannel(1)[0]);
+        //    gridK.getChannel(0)[0], gridK.getChannel(1)[0]);
     }
 
     void draw(void *pixels, int stride, FunctionBase *fn, Palette *pal) {
         for(int y = 0; y < h; y++) {
             uint32_t *pix_line = (uint32_t *)((char *)pixels + y * stride);
-            pal->render_line(pix_line, gridY, gridK1, y);
+            pal->render_line(pix_line, gridY, gridK, y);
         }
     }
 
     int w, h;
-    float dt;
+    float cur_dt;
     int since_instable;
     Grid gridY;
-    Grid gridK1;
-    Grid gridK2;
-    Grid gridTmp;
+    Grid gridK;
+    Grid gridL;
 };
 
 RdnGrids *rdn = NULL;
@@ -525,8 +529,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
     fn->set_params((float *)params, len);
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
     //rdn->reset_grid();
-    // FIXME
-    if(rdn) rdn->since_instable = 10000;
+    if(rdn) rdn->reset_cur_instable();
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(
