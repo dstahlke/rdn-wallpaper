@@ -27,6 +27,27 @@ struct Grid {
         return A + wh*i;
     }
 
+    void fixCheckerBoard() {
+        for(int chan=0; chan<n; chan++) {
+            float *p = getChannel(chan);
+            for(int y=0; y<h; y++) {
+                int yl = y>  0 ? y-1 : h-1;
+                int yr = y<h-1 ? y+1 :   0;
+                for(int x=0; x<w; x++) {
+                    int xl = x>  0 ? x-1 : w-1;
+                    int xr = x<w-1 ? x+1 :   0;
+                    p[y*w + x] = (
+                        p[y *w + x ] * 4 +
+                        p[yl*w + x ] +
+                        p[yr*w + x ] +
+                        p[y *w + xl] +
+                        p[y *w + xr]
+                    ) / 8;
+                }
+            }
+        }
+    }
+
     int w, h, n, wh, whn;
     float *A;
 };
@@ -35,6 +56,9 @@ class Palette {
 public:
     virtual void render_line(uint32_t *pix_line, Grid &G, Grid &DG, int y);
 };
+
+#define CLIP_BYTE(v) (v < 0 ? 0 : v > 255 ? 255 : v)
+#define RGB24(r, g, b) (0xff000000 + (CLIP_BYTE(b)<<16) + (CLIP_BYTE(g)<<8) + CLIP_BYTE(r))
 
 class PaletteGL0 : public Palette {
 public:
@@ -61,13 +85,7 @@ public:
             int green = (int)((rv-rk/2) * 100);
             int blue  = green + (int)(gridA[x] * 30);
 
-            if(red < 0) red = 0;
-            if(red > 255) red = 255;
-            if(green < 0) green = 0;
-            if(green > 255) green = 255;
-            if(blue < 0) blue = 0;
-            if(blue > 255) blue = 255;
-            pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+            pix_line[x] = RGB24(red, green, blue);
         }
         cnt += G.w;
     }
@@ -102,13 +120,7 @@ public:
             int green = (int)(-rk * 30);
             int blue  = green;
 
-            if(red < 0) red = 0;
-            if(red > 255) red = 255;
-            if(green < 0) green = 0;
-            if(green > 255) green = 255;
-            if(blue < 0) blue = 0;
-            if(blue > 255) blue = 255;
-            pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+            pix_line[x] = RGB24(red, green, blue);
         }
         cnt += G.w;
     }
@@ -130,13 +142,7 @@ public:
             int green = (int)(gridDA[x] * 20000);
             int blue  = (int)(gridB [x] * 1000);
 
-            if(red < 0) red = 0;
-            if(red > 255) red = 255;
-            if(green < 0) green = 0;
-            if(green > 255) green = 255;
-            if(blue < 0) blue = 0;
-            if(blue > 255) blue = 255;
-            pix_line[x] = 0xff000000 + (blue<<16) + (green<<8) + red;
+            pix_line[x] = RGB24(red, green, blue);
         }
     }
 };
@@ -285,7 +291,7 @@ struct GrayScott : public FunctionBase {
 
     virtual float get_dt() {
         // Stability condition determined by experimentation.
-        return 0.1f / D;
+        return 0.3f / D;
     }
 
     virtual void compute_dx_dt(Grid &Gi, Grid &Go, int w, int h) {
@@ -332,6 +338,7 @@ struct GrayScott : public FunctionBase {
 struct RdnGrids {
     RdnGrids(int _w, int _h) :
         w(_w), h(_h),
+        dt(0.01), since_instable(10000),
         gridY  (w, h, 2),
         gridK1 (w, h, 2),
         gridK2 (w, h, 2),
@@ -365,37 +372,80 @@ struct RdnGrids {
                 }
             }
         }
+
+        dt = 0.01;
+        since_instable = 10000;
+    }
+
+    int step_inner(FunctionBase *fn, float step_dt) {
+        fn->compute_dx_dt(gridY, gridK1, w, h);
+
+        //int second_order = 0;
+        //if(second_order) {
+        //    for(int i=0; i<gridY.whn; i++) {
+        //        gridTmp.A[i] = gridY.A[i] + gridK1.A[i] * step_dt/2;
+        //    }
+        //    fn->compute_dx_dt(gridTmp, gridK2, w, h);
+        //    for(int i=0; i<gridY.whn; i++) {
+        //        gridY.A[i] += gridK2.A[i] * step_dt;
+        //    }
+        //} else {
+
+        float limit = 0.001 / step_dt;
+        int instable = 0;
+        for(int j=0; j<gridY.n; j++) {
+            float *p = gridK1.getChannel(j);
+            int l = gridY.wh-2-2*gridY.w;
+            int w2 = w+w;
+            for(int i=0; i<l; i++) {
+                if(
+                    p[i   ] < limit && p[i+1   ] > limit && p[i+2   ] < limit &&
+                    p[i+w ] > limit && p[i+1+w ] < limit && p[i+2+w ] > limit &&
+                    p[i+w2] < limit && p[i+1+w2] > limit && p[i+2+w2] < limit
+                ) {
+                    instable++;
+                    //LOGI("pixel=%g", p[i]);
+                    break;
+                }
+            }
+        }
+        for(int i=0; i<gridY.whn; i++) {
+            gridY.A[i] += gridK1.A[i] * step_dt;
+        }
+
+        return instable;
     }
 
     void step(FunctionBase *fn) {
         for(int iter=0; iter<5; iter++) {
-            fn->compute_dx_dt(gridY, gridK1, w, h);
+            int instable = step_inner(fn, dt);
 
-            //float max = 0;
-            //for(int i=0; i<gridY.whn; i++) {
-            //    float v = fabs(gridK1.A[i]);
-            //    if(v > max) max = v;
-            //}
-            ////LOGI("max=%g", max);
-            //if(max < 1) max = 1;
-            //float dt = 0.1 / max;
-
-            float dt = fn->get_dt();
-            //LOGI("dt=%g", dt);
-
-            int second_order = 0;
-            if(second_order) {
-                for(int i=0; i<gridY.whn; i++) {
-                    gridTmp.A[i] = gridY.A[i] + gridK1.A[i] * dt/2;
+            if(instable) {
+                LOGI("dt=%g si=%d", dt, since_instable);
+                dt *= 0.99;
+                LOGI("-> dt=%g", dt);
+                gridY.fixCheckerBoard();
+                // FIXME: could freeze UI:
+                while(step_inner(fn, dt / 5.0)) {
+                    dt *= 0.99;
+                    LOGI("-> dt=%g", dt);
                 }
-                fn->compute_dx_dt(gridTmp, gridK2, w, h);
-                for(int i=0; i<gridY.whn; i++) {
-                    gridY.A[i] += gridK2.A[i] * dt;
-                }
+                since_instable = 0;
             } else {
-                for(int i=0; i<gridY.whn; i++) {
-                    gridY.A[i] += gridK1.A[i] * dt;
+                since_instable++;
+                if(since_instable > 1000) {
+                    dt *= 1.01;
+                } else {
+                    dt *= 1.0001;
                 }
+            }
+
+            // FIXME: tie to reset_grid or something?
+            if(dt < 1e-6) dt = 1e-6;
+            if(dt > 1e+1) dt = 1e+1;
+
+            if(!isfinite(gridY.getChannel(0)[0])) {
+                reset_grid(fn);
             }
         }
         //LOGI("pixel=%g,%g,%g,%g",
@@ -411,6 +461,8 @@ struct RdnGrids {
     }
 
     int w, h;
+    float dt;
+    int since_instable;
     Grid gridY;
     Grid gridK1;
     Grid gridK2;
@@ -473,6 +525,8 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
     fn->set_params((float *)params, len);
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
     //rdn->reset_grid();
+    // FIXME
+    if(rdn) rdn->since_instable = 10000;
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(
