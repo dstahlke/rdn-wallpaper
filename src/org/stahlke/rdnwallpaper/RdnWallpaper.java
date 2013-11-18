@@ -68,6 +68,7 @@ public class RdnWallpaper extends WallpaperService {
         private long mLastDrawTime;
         private int mWidth;
         private int mHeight;
+        private boolean mDoRotate;
         private int mGridW;
         private int mGridH;
         private Bitmap mBitmap;
@@ -199,8 +200,15 @@ public class RdnWallpaper extends WallpaperService {
         public void onSurfaceChanged(SurfaceHolder holder, int format, int width, int height) {
             Log.i(TAG, "MyEngine.onSurfaceChanged");
             super.onSurfaceChanged(holder, format, width, height);
-            mWidth = width;
-            mHeight = height;
+            if(height > width) {
+                mWidth = width;
+                mHeight = height;
+                mDoRotate = false;
+            } else {
+                mWidth = height;
+                mHeight = width;
+                mDoRotate = true;
+            }
 
             // might need to update resolution/tiling
             setParamsToPrefs();
@@ -244,6 +252,12 @@ public class RdnWallpaper extends WallpaperService {
             try {
                 c = holder.lockCanvas();
                 if (c != null) {
+                    c.save();
+                    if(mDoRotate) {
+                        c.rotate(-90);
+                        c.translate(-mWidth+1,0);
+                    }
+
                     long t1 = SystemClock.elapsedRealtime();
                     renderFrame(mBitmap);
 
@@ -267,6 +281,8 @@ public class RdnWallpaper extends WallpaperService {
 
                     delay -= tf-t1;
                     if(delay < 0) delay = 0;
+
+                    c.restore();
                 }
             } finally {
                 if (c != null) holder.unlockCanvasAndPost(c);
