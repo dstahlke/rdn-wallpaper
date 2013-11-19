@@ -14,7 +14,6 @@
 #define LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 
 #define CLIP_BYTE(v) (v < 0 ? 0 : v > 255 ? 255 : v)
-#define RGB24(r, g, b) (0xff000000 + (CLIP_BYTE(int(b))<<16) + (CLIP_BYTE(int(g))<<8) + CLIP_BYTE(int(r)))
 
 struct Grid {
     Grid(int _w, int _h, int _n) :
@@ -82,6 +81,13 @@ struct Grid {
 class Palette {
 public:
     virtual void render_line(uint32_t *pix_line, Grid &G, Grid &DG, Grid &LG, int y);
+
+    static inline int to_rgb24(float r, float g, float b) {
+        int ri = int(r);
+        int gi = int(g);
+        int bi = int(b);
+        return 0xff000000 + (CLIP_BYTE(bi)<<16) + (CLIP_BYTE(gi)<<8) + CLIP_BYTE(ri);
+    }
 };
 
 struct FunctionBase {
@@ -195,11 +201,11 @@ struct GinzburgLandau : public FunctionBase {
                 accum_rk += rk;
                 rv /= avg_rv;
                 rk /= avg_rk;
-                int red   = (int)((rv-rk/4) * 150);
-                int green = (int)((rv-rk/2) * 100);
-                int blue  = green + (int)(gridA[x] * 30);
+                int red   = (rv-rk/4) * 150;
+                int green = (rv-rk/2) * 100;
+                int blue  = green + gridA[x] * 30;
 
-                pix_line[x] = RGB24(red, green, blue);
+                pix_line[x] = to_rgb24(red, green, blue);
             }
             cnt += G.w;
         }
@@ -230,11 +236,11 @@ struct GinzburgLandau : public FunctionBase {
                 accum_rv += rv;
                 rv /= avg_rv;
                 lv /= avg_rv;
-                int green = 0; //(int)(parent.D * gridLA[x] * 300 / avg_rv);
+                int green = 0;
                 int blue  = parent.D * lv * 500;
                 int red   = rv * 100 + blue;
 
-                pix_line[x] = RGB24(red, green, blue);
+                pix_line[x] = to_rgb24(red, green, blue);
             }
             cnt += G.w;
         }
@@ -328,11 +334,11 @@ struct GrayScott : public FunctionBase {
             float *gridDA = DG.getChannel(0) + y * G.w;
             float *gridDB = DG.getChannel(1) + y * G.w;
             for(int x = 0; x < G.w; x++) {
-                int red   = (int)((1-gridA[x]) * 200);
-                int green = (int)(gridDA[x] * 20000);
-                int blue  = (int)(gridB [x] * 1000);
+                int red   = (1-gridA[x]) * 200;
+                int green = gridDA[x] * 20000;
+                int blue  = gridB [x] * 1000;
 
-                pix_line[x] = RGB24(red, green, blue);
+                pix_line[x] = to_rgb24(red, green, blue);
             }
         }
     };
@@ -349,11 +355,11 @@ struct GrayScott : public FunctionBase {
             float *gridLB = LG.getChannel(1) + y * G.w;
             for(int x = 0; x < G.w; x++) {
                 //float w = sqrtf(gridLA[x]*gridLA[x] + gridLB[x]*gridLB[x]);
-                int red   = (int)(parent.D * gridLB[x] * 30000);
-                int green = 0; //(int)(parent.D * gridLB[x] * 20000);
-                int blue  = (int)(gridDA[x] * 60000) + green;
+                int red   = parent.D * gridLB[x] * 30000;
+                int green = 0; //parent.D * gridLB[x] * 20000;
+                int blue  = gridDA[x] * 60000 + green;
 
-                pix_line[x] = RGB24(red, green, blue);
+                pix_line[x] = to_rgb24(red, green, blue);
             }
         }
 
