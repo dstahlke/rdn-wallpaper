@@ -80,6 +80,7 @@
 
     <string-array name="palettes1">
         <item>A</item>
+        <item>B</item>
     </string-array>
 
     <string-array name="resolution_labels">
