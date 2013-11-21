@@ -76,6 +76,14 @@
             android:key="palettes_box"
             android:title="palettes"
             />
+        <org.stahlke.rdnwallpaper.SeekBarPreference
+            android:key="hue"
+            android:defaultValue="0.0"
+            rdnwallpaper:min="0.0"
+            rdnwallpaper:max="360.0"
+            rdnwallpaper:rate="1.0"
+            rdnwallpaper:format="Hue: %.0f"
+            />
     </PreferenceCategory>
     <PreferenceCategory
         android:title="Performance"

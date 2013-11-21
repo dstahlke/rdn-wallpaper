@@ -15,6 +15,8 @@
 
 #define CLIP_BYTE(v) (v < 0 ? 0 : v > 255 ? 255 : v)
 
+float color_matrix[20];
+
 struct Grid {
     Grid(int _w, int _h, int _n) :
         w(_w), h(_h), n(_n),
@@ -83,9 +85,16 @@ public:
     virtual void render_line(uint32_t *pix_line, Grid &G, Grid &DG, Grid &LG, int y);
 
     static inline int to_rgb24(float r, float g, float b) {
-        int ri = int(r);
-        int gi = int(g);
-        int bi = int(b);
+        if(r < 0) r = 0;
+        if(g < 0) g = 0;
+        if(b < 0) b = 0;
+        float *cm = color_matrix;
+        float rp = r*cm[0] + g*cm[1] + b*cm[2] + cm[4]; cm += 5;
+        float gp = r*cm[0] + g*cm[1] + b*cm[2] + cm[4]; cm += 5;
+        float bp = r*cm[0] + g*cm[1] + b*cm[2] + cm[4]; cm += 5;
+        int ri = int(rp);
+        int gi = int(gp);
+        int bi = int(bp);
         return 0xff000000 + (CLIP_BYTE(bi)<<16) + (CLIP_BYTE(gi)<<8) + CLIP_BYTE(ri);
     }
 };
@@ -531,6 +540,8 @@ extern "C" {
         JNIEnv *env, jobject obj, jobject bitmap);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
         JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params, jint pal);
+    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
+        JNIEnv *env, jobject obj, jfloatArray new_cm_arr);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(
         JNIEnv *env, jobject obj);
 };
@@ -576,6 +587,18 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
     //rdn->reset_grid();
     if(rdn) rdn->reset_cur_instable();
+}
+
+JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
+    JNIEnv *env, jobject obj, jfloatArray new_cm_arr
+) {
+    jfloat *params = env->GetFloatArrayElements(new_cm_arr, NULL);
+    jsize len = env->GetArrayLength(new_cm_arr);
+    if(len != 20) LOGE("wrong color matrix len: %d", len);
+    for(int i=0; i<20; i++) {
+        color_matrix[i] = params[i];
+    }
+    env->ReleaseFloatArrayElements(new_cm_arr, params, JNI_ABORT);
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(

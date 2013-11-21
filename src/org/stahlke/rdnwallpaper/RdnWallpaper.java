@@ -4,6 +4,7 @@ import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.ColorMatrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.os.Handler;
@@ -19,6 +20,7 @@ public class RdnWallpaper extends WallpaperService {
     // jni method
     public static native void renderFrame(Bitmap bitmap);
     public static native void setParams(int fn_idx, float[] params, int pal_idx);
+    public static native void setColorMatrix(float[] cm);
     public static native void resetGrid();
 
     static {
@@ -37,6 +39,25 @@ public class RdnWallpaper extends WallpaperService {
 
     static public int getDefaultRepeatY(int w, int h) {
         return h / 500 + 1;
+    }
+
+    // http://stackoverflow.com/a/15119089/1048959
+    public static void adjustHue(ColorMatrix cm, float value) {
+        float cosVal = (float) Math.cos(value);
+        float sinVal = (float) Math.sin(value);
+        float lumR = 0.213f;
+        float lumG = 0.715f;
+        float lumB = 0.072f;
+        float[] mat = new float[] {
+            lumR + cosVal * (1 - lumR) + sinVal * (-lumR), lumG + cosVal * (-lumG) +
+                sinVal * (-lumG), lumB + cosVal * (-lumB) + sinVal * (1 - lumB), 0, 0, 
+            lumR + cosVal * (-lumR) + sinVal * (0.143f), lumG + cosVal * (1 - lumG) +
+                sinVal * (0.140f), lumB + cosVal * (-lumB) + sinVal * (-0.283f), 0, 0,
+            lumR + cosVal * (-lumR) + sinVal * (-(1 - lumR)), lumG + cosVal * (-lumG) +
+                sinVal * (lumG), lumB + cosVal * (1 - lumB) + sinVal * (lumB), 0, 0, 
+                 0f, 0f, 0f, 1f, 0f, 
+                 0f, 0f, 0f, 0f, 1f };
+        cm.postConcat(new ColorMatrix(mat));
     }
 
     @Override
@@ -141,6 +162,12 @@ public class RdnWallpaper extends WallpaperService {
             Log.i(TAG, "palette="+pal);
 
             setParams(fn_idx, p_arr, pal);
+
+            float newHue = mPrefs.getFloat("hue", 0);
+
+            ColorMatrix cm = new ColorMatrix();
+            adjustHue(cm, newHue / 180f * (float)Math.PI);
+            setColorMatrix(cm.getArray());
 
             int newRes =
                 Integer.parseInt(mPrefs.getString("resolution", "0"));
@@ -259,6 +286,7 @@ public class RdnWallpaper extends WallpaperService {
                     }
 
                     long t1 = SystemClock.elapsedRealtime();
+
                     renderFrame(mBitmap);
 
                     long t2 = SystemClock.elapsedRealtime();
