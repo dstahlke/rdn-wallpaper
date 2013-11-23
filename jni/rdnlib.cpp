@@ -56,7 +56,7 @@ struct Grid {
         return instable;
     }
 
-    int w, h, n, wh, whn;
+    const int w, h, n, wh, whn;
     float *A;
 };
 
@@ -82,6 +82,10 @@ public:
 struct FunctionBase {
     virtual ~FunctionBase() { }
 
+    virtual float get_diffusion_matrix(float m[]) {
+        LOGE("method get_diffusion_matrix must be overridden");
+    }
+
     virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
         LOGE("method compute_dx_dt must be overridden");
     }
@@ -96,10 +100,6 @@ struct FunctionBase {
 
     virtual void set_params(float *p, int len) {
         LOGE("method set_params must be overridden");
-    }
-
-    virtual float get_dt() {
-        LOGE("method get_dt must be overridden");
     }
 
     virtual Palette *get_palette(int id) {
@@ -142,9 +142,10 @@ struct GinzburgLandau : public FunctionBase {
         LOGE("beta  = %f", beta );
     }
 
-    virtual float get_dt() {
-        // Stability condition determined by experimentation.
-        return 0.1f / D / (1 + fabsf(alpha));
+    virtual float get_diffusion_matrix(float m[]) {
+        m[0] = D;       m[1] = -D*alpha;
+        m[2] = D*alpha; m[3] = D;
+        return D+(1+fabsf(alpha)); // FIXME
     }
 
     virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
@@ -152,18 +153,14 @@ struct GinzburgLandau : public FunctionBase {
         float *Vibuf = Gi.getChannel(1) + y*w;
         float *Uobuf = Go.getChannel(0) + y*w;
         float *Vobuf = Go.getChannel(1) + y*w;
-        float *Ulbuf = Gl.getChannel(0) + y*w;
-        float *Vlbuf = Gl.getChannel(1) + y*w;
 
         for(int x=0; x<w; x++) {
-            float lU = Ulbuf[x];
-            float lV = Vlbuf[x];
             float  U = Uibuf[x];
             float  V = Vibuf[x];
             float r2 = U*U + V*V;
 
-            Uobuf[x] = U - (U - beta*V)*r2 + D*(lU - alpha*lV);
-            Vobuf[x] = V - (V + beta*U)*r2 + D*(lV + alpha*lU);
+            Uobuf[x] = U - (U - beta*V)*r2; // + D*(lU - alpha*lV);
+            Vobuf[x] = V - (V + beta*U)*r2; // + D*(lV + alpha*lU);
             // From Ready (https://code.google.com/p/reaction-diffusion)
             //Uobuf[x] = DU*lU + alpha*U - gamma*V + (-beta*U + delta*V)*r2;
             //Vobuf[x] = DV*lV + alpha*V + gamma*U + (-beta*V - delta*U)*r2;
@@ -236,7 +233,7 @@ struct GinzburgLandau : public FunctionBase {
 
         int cnt;
         float accum_rv;
-        float avg_rv, avg_rk;
+        float avg_rv;
 
         GinzburgLandau &parent;
     };
@@ -290,9 +287,11 @@ struct GrayScott : public FunctionBase {
         k = p[2];
     }
 
-    virtual float get_dt() {
-        // Stability condition determined by experimentation.
-        return 0.3f / D;
+    virtual float get_diffusion_matrix(float m[]) {
+        m[0] = 2*D; m[1] = 0;
+        m[2] = 0;   m[3] = D;
+        float norm = 2*D;
+        return norm;
     }
 
     virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
@@ -311,8 +310,8 @@ struct GrayScott : public FunctionBase {
 
             //Ao[x] = 1 - ai - mu*ai*bi*bi + D*da;
             //Bo[x] = mu*ai*bi*bi - phi*bi + D*db;
-            Ao[x] = 2*D*da - ai*bi*bi + F*(1-ai);
-            Bo[x] =   D*db + ai*bi*bi - (F+k)*bi;
+            Ao[x] = /* 2*D*da */ - ai*bi*bi + F*(1-ai);
+            Bo[x] = /*   D*db + */ ai*bi*bi - (F+k)*bi;
         }
     }
 
@@ -336,6 +335,11 @@ struct GrayScott : public FunctionBase {
         PaletteGS1(GrayScott &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line, Grid &G, Grid &DG, Grid &LG, int y) {
+            if(y == 0) {
+                avg_rv = accum_rv / cnt;
+                accum_rv = 0;
+                cnt = 0;
+            }
             float *gridA = G.getChannel(0) + y * G.w;
             float *gridB = G.getChannel(1) + y * G.w;
             float *gridDA = DG.getChannel(0) + y * G.w;
@@ -343,14 +347,22 @@ struct GrayScott : public FunctionBase {
             float *gridLA = LG.getChannel(0) + y * G.w;
             float *gridLB = LG.getChannel(1) + y * G.w;
             for(int x = 0; x < G.w; x++) {
+                float rv = parent.D * gridLB[x];
+                float gv = parent.D * gridLA[x];
+                if(rv > 0) accum_rv += rv;
                 //float w = sqrtf(gridLA[x]*gridLA[x] + gridLB[x]*gridLB[x]);
-                int red   = parent.D * gridLB[x] * 30000;
+                int red   = rv * 60000;
                 int green = 0; //parent.D * gridLB[x] * 20000;
-                int blue  = gridDA[x] * 60000 + green;
+                int blue  = gv * 60000;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
+            cnt += G.w;
         }
+
+        int cnt;
+        float accum_rv;
+        float avg_rv;
 
         GrayScott &parent;
     };
@@ -444,45 +456,28 @@ struct RdnGrids {
         }
     }
 
-    // compute laplacian before calling this
-    float step_inner(FunctionBase *fn, float step_dt) {
-        for(int y=0; y<h; y++) {
-            fn->compute_dx_dt(gridY, gridK, gridL, w, y);
-        }
-
-        float limit_d = 0.5;
-
-        for(int i=0; i<gridY.whn; i++) {
-            float d = gridK.A[i] * step_dt;
-            float ad = fabsf(d);
-            if(ad > limit_d) {
-                step_dt *= limit_d / ad;
-                LOGI("ad=%g dt=%g", ad, step_dt);
-                d = (d>0) ? limit_d : -limit_d;
-            }
-
-            gridY.A[i] += d;
-        }
-
-        return step_dt;
-    }
-
     void step(FunctionBase *fn) {
+        const int n = gridY.n;
+        float m[25]; // FIXME - n**2
+        float diffusion_norm = fn->get_diffusion_matrix(m);
+        float diffusion_stability = 1.0 / (diffusion_norm * 4.0);
+        diffusion_stability *= 0.95;
+
         for(int iter=0; iter<5; iter++) {
             compute_laplacian();
-            while(gridL.detectCheckerBoard()) {
-                LOGI("cur_dt=%g si=%d", cur_dt, since_instable);
-                cur_dt *= 0.99;
-                for(int chan=0; chan<gridY.n; chan++) {
-                    float *Ybuf = gridY.getChannel(chan);
-                    float *Lbuf = gridL.getChannel(chan);
-                    for(int i=0; i<gridY.wh; i++) {
-                        Ybuf[i] += Lbuf[i] / 8.0 * 0.1;
-                    }
-                }
-                compute_laplacian();
-                since_instable = 0;
-            }
+            //while(gridL.detectCheckerBoard()) {
+            //    LOGI("cur_dt=%g si=%d", cur_dt, since_instable);
+            //    cur_dt *= 0.99;
+            //    for(int chan=0; chan<n; chan++) {
+            //        float *Ybuf = gridY.getChannel(chan);
+            //        float *Lbuf = gridL.getChannel(chan);
+            //        for(int i=0; i<gridY.wh; i++) {
+            //            Ybuf[i] += Lbuf[i] / 8.0 * 0.1;
+            //        }
+            //    }
+            //    compute_laplacian();
+            //    since_instable = 0;
+            //}
 
             since_instable++;
             if(since_instable > 1000) {
@@ -491,7 +486,40 @@ struct RdnGrids {
                 cur_dt *= 1.0001;
             }
 
-            cur_dt = step_inner(fn, cur_dt);
+            if(cur_dt > diffusion_stability) {
+                cur_dt = diffusion_stability;
+            }
+
+            // FIXME - avoid multiple passes to maybe keep it all in cache
+
+            for(int chanY=0; chanY<n; chanY++)
+            for(int chanL=0; chanL<n; chanL++) {
+                float *Ybuf = gridY.getChannel(chanY);
+                float *Lbuf = gridL.getChannel(chanL);
+                float v = m[chanY*n + chanL] * cur_dt;
+                for(int i=0; i<gridY.wh; i++) {
+                    Ybuf[i] += Lbuf[i] * v;
+                }
+            }
+
+            for(int y=0; y<h; y++) {
+                fn->compute_dx_dt(gridY, gridK, gridL, w, y);
+            }
+
+            float limit_d = 0.5;
+
+            for(int i=0; i<gridY.whn; i++) {
+                float d = gridK.A[i] * cur_dt;
+                float ad = fabsf(d);
+                if(ad > limit_d) {
+                    cur_dt *= limit_d / ad;
+                    LOGI("ad=%g dt=%g", ad, cur_dt);
+                    d = (d>0) ? limit_d : -limit_d;
+                    since_instable = 0;
+                }
+
+                gridY.A[i] += d;
+            }
 
             if(!isfinite(gridY.getChannel(0)[0])) {
                 reset_grid(fn);
