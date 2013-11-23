@@ -33,7 +33,7 @@ struct Grid {
     }
 
     int detectCheckerBoard() {
-        float limit = 0.001;
+        float limit = 0.01;
         float la = -limit;
         float lb =  limit;
         int instable = 0;
@@ -54,27 +54,6 @@ struct Grid {
             }
         }
         return instable;
-    }
-
-    void fixCheckerBoard() {
-        for(int chan=0; chan<n; chan++) {
-            float *p = getChannel(chan);
-            // FIXME - Klein geometry here as well
-            for(int y=0; y<h; y++) {
-                int yl = y>  0 ? y-1 : h-1;
-                int yr = y<h-1 ? y+1 :   0;
-                for(int x=0; x<w; x++) {
-                    int xl = x>  0 ? x-1 : w-1;
-                    int xr = x<w-1 ? x+1 :   0;
-                    p[y*w + x] = p[y*w + x] * 0.9 + (
-                        p[yl*w + x ] +
-                        p[yr*w + x ] +
-                        p[y *w + xl] +
-                        p[y *w + xr]
-                    ) * 0.25 * 0.1;
-                }
-            }
-        }
     }
 
     int w, h, n, wh, whn;
@@ -451,6 +430,7 @@ struct RdnGrids {
                 for(int x=0; x<w; x++) {
                     int xl = x>  0 ? x-1 : w-1;
                     int xr = x<w-1 ? x+1 :   0;
+                    // Klein bottle topology
                     int x2 = y==0 ? w-1-x : x;
                     int x3 = y==h-1 ? w-1-x : x;
                     Lbuf[y*w+x] =
@@ -493,7 +473,13 @@ struct RdnGrids {
             while(gridL.detectCheckerBoard()) {
                 LOGI("cur_dt=%g si=%d", cur_dt, since_instable);
                 cur_dt *= 0.99;
-                gridY.fixCheckerBoard();
+                for(int chan=0; chan<gridY.n; chan++) {
+                    float *Ybuf = gridY.getChannel(chan);
+                    float *Lbuf = gridL.getChannel(chan);
+                    for(int i=0; i<gridY.wh; i++) {
+                        Ybuf[i] += Lbuf[i] / 8.0 * 0.1;
+                    }
+                }
                 compute_laplacian();
                 since_instable = 0;
             }

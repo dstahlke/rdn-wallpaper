@@ -300,7 +300,7 @@ public class RdnWallpaper extends WallpaperService {
                         if(y % 2 == 1) {
                             Matrix m = new Matrix();
                             m.preScale(-1, 1);
-                            m.postTranslate(mGridW, 0);
+                            m.postTranslate(mWidth/mRes, 0);
                             c.concat(m);
                         }
                         c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
