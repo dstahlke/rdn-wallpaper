@@ -10,6 +10,7 @@
 #include <jni.h>
 
 #include <Eigen/Core>
+#include <Eigen/SVD>
 
 #define LOG_TAG "rdn"
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
@@ -24,57 +25,8 @@ T max(const T x, const T y) {
     return x > y ? x : y;
 }
 
-template <int n>
-struct vector {
-    typedef Eigen::Array<float, n, 1> Type;
-};
-
-#define vecn typename vector<n>::Type
-
-//template <int n>
-//struct vector : public Eigen::Array<float, n, 1> {
-//    vector() { }
-//
-//    vector(float a, float b) : Eigen::Array<float, 2, 1>(a, b) {
-//    }
-//};
-
-//template <int n>
-//struct vector {
-//    vector() {
-//        v[0] = 0;
-//        v[1] = 0;
-//    }
-//
-//    vector(float a, float b) {
-//        v[0] = a;
-//        v[1] = b;
-//    }
-//
-//    vector<n> &operator+=(const vector<n> &rhs) {
-//        for(int i=0; i<n; i++) v[i] += rhs.v[i];
-//        return *this;
-//    }
-//
-//    vector<n> operator+(const vector<n> &rhs) const {
-//        vector<n> ret = *this;
-//        ret += rhs;
-//        return ret;
-//    }
-//
-//    vector<n> &operator*=(const float x) {
-//        for(int i=0; i<n; i++) v[i] *= x;
-//        return *this;
-//    }
-//
-//    vector<n> operator*(const float x) const {
-//        vector<n> ret = *this;
-//        ret *= x;
-//        return ret;
-//    }
-//
-//    float v[n];
-//};
+#define vecn Eigen::Matrix<float, n, 1>
+#define matnn Eigen::Matrix<float, n, n>
 
 template <int n>
 struct Grid {
@@ -140,7 +92,7 @@ template <int n>
 struct FunctionBase {
     virtual ~FunctionBase() { }
 
-    virtual float get_diffusion_matrix(float m[]) = 0;
+    virtual matnn get_diffusion_matrix() = 0;
 
     virtual void compute_dx_dt(Grid<n> &Gi, Grid<n> &Go, Grid<n> &Gl, int w, int y) = 0;
 
@@ -195,10 +147,12 @@ struct GinzburgLandau : public FunctionBase<2> {
         LOGE("beta  = %f", beta );
     }
 
-    virtual float get_diffusion_matrix(float m[]) {
-        m[0] = D;       m[1] = -D*alpha;
-        m[2] = D*alpha; m[3] = D;
-        return D+(1+fabsf(alpha)); // FIXME
+    virtual matnn get_diffusion_matrix() {
+        matnn ret;
+        ret <<
+            D,       -D*alpha,
+            D*alpha, D;
+        return ret;
     }
 
     virtual void compute_dx_dt(Grid<n> &Gi, Grid<n> &Go, Grid<n> &Gl, int w, int y) {
@@ -350,11 +304,10 @@ struct GrayScott : public FunctionBase<2> {
         k = p[2];
     }
 
-    virtual float get_diffusion_matrix(float m[]) {
-        m[0] = 2*D; m[1] = 0;
-        m[2] = 0;   m[3] = D;
-        float norm = 2*D;
-        return norm;
+    virtual matnn get_diffusion_matrix() {
+        matnn ret;
+        ret << 2*D, 0, 0, D;
+        return ret;
     }
 
     virtual void compute_dx_dt(Grid<n> &Gi, Grid<n> &Go, Grid<n> &Gl, int w, int y) {
@@ -514,64 +467,63 @@ struct RdnGrids {
     }
 
     void step(FunctionBase<n> *fn) {
-        float m[n*n];
-        float diffusion_norm = fn->get_diffusion_matrix(m);
+        matnn m = fn->get_diffusion_matrix();
+        Eigen::JacobiSVD<matnn, Eigen::NoQRPreconditioner> svd(m);
+        float diffusion_norm = svd.singularValues().array().abs().maxCoeff();
         float diffusion_stability = 1.0 / (diffusion_norm * 4.0);
         diffusion_stability *= 0.95;
 
-        LOGI("dt=%g, ds=%g", cur_dt, diffusion_stability);
+        //LOGI("dt=%g, dn=%g, ds=%g", cur_dt, diffusion_norm, diffusion_stability);
 
-        float max_dt = 1;
+        float max_dt = 2; // FIXME
 
         for(int iter=0; iter<5; iter++) {
             since_instable++;
-            if(since_instable > 1000) {
-                cur_dt *= 1.05;
-            } else {
-                cur_dt *= 1.0001;
-            }
+            //if(since_instable > 1000) {
+            //    cur_dt *= 1.05;
+            //} else {
+            //    cur_dt *= 1.0001;
+            //}
+            cur_dt *= 1.01;
             if(cur_dt > max_dt) cur_dt = max_dt;
-
-            // FIXME - try to keep things in cache
 
             float lap_to_go = cur_dt;
             while(lap_to_go > 0) {
                 float lap_dt = lap_to_go;
                 if(lap_dt > diffusion_stability) lap_dt = diffusion_stability;
+                matnn m2 = m * lap_dt;
 
                 compute_laplacian();
                 vecn *Ybuf = gridY.A;
                 vecn *Lbuf = gridL.A;
                 for(int i=0; i<gridY.wh; i++) {
-                    for(int j=0; j<n; j++)
-                    for(int k=0; k<n; k++) {
-                    float v = m[j*n + k] * lap_dt;
-                        Ybuf[i][j] += Lbuf[i][k] * v;
-                    }
+                    Ybuf[i] += m2 * Lbuf[i];
                 }
 
                 lap_to_go -= lap_dt;
             }
 
-            for(int y=0; y<h; y++) {
-                fn->compute_dx_dt(gridY, gridK, gridL, w, y);
-            }
-
             float limit_d = 0.5;
 
-            for(int i=0; i<gridY.wh; i++) {
-                vecn d = gridK.A[i] * cur_dt;
-                float ad = max(fabsf(d[0]), fabsf(d[1])); // FIXME
-                if(ad > limit_d) {
-                    cur_dt *= limit_d / ad;
-                    LOGI("ad=%g dt=%g", ad, cur_dt);
-                    for(int j=0; j<n; j++) {
-                        d[j] = (d[j]>0) ? limit_d : -limit_d;
-                    }
-                    since_instable = 0;
-                }
+            for(int y=0; y<h; y++) {
+                vecn *bufY = gridY.A + w*y;
+                vecn *bufK = gridK.A + w*y;
 
-                gridY.A[i] += d;
+                fn->compute_dx_dt(gridY, gridK, gridL, w, y);
+
+                for(int x=0; x<w; x++) {
+                    vecn d = bufK[x] * cur_dt;
+                    float ad = d.cwiseAbs().maxCoeff();
+                    if(ad > limit_d) {
+                        cur_dt *= limit_d / ad;
+                        LOGI("ad=%g dt=%g", ad, cur_dt);
+                        for(int j=0; j<n; j++) {
+                            d[j] = (d[j]>0) ? limit_d : -limit_d;
+                        }
+                        since_instable = 0;
+                    }
+                    bufY[x] += d;
+                }
             }
 
             if(!std::isfinite(gridY.A[0][0])) {
