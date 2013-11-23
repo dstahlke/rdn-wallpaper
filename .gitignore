@@ -2,3 +2,6 @@ bin/
 gen/
 libs/
 obj/
+
+# Get this from https://bitbucket.org/erublee/eigen-android
+eigen-android/
