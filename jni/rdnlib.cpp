@@ -59,6 +59,7 @@ struct Grid {
     void fixCheckerBoard() {
         for(int chan=0; chan<n; chan++) {
             float *p = getChannel(chan);
+            // FIXME - Klein geometry here as well
             for(int y=0; y<h; y++) {
                 int yl = y>  0 ? y-1 : h-1;
                 int yr = y<h-1 ? y+1 :   0;
@@ -450,10 +451,12 @@ struct RdnGrids {
                 for(int x=0; x<w; x++) {
                     int xl = x>  0 ? x-1 : w-1;
                     int xr = x<w-1 ? x+1 :   0;
+                    int x2 = y==0 ? w-1-x : x;
+                    int x3 = y==h-1 ? w-1-x : x;
                     Lbuf[y*w+x] =
                         Ybuf[y *w + x ] * (-4) +
-                        Ybuf[yl*w + x ] +
-                        Ybuf[yr*w + x ] +
+                        Ybuf[yl*w + x2] +
+                        Ybuf[yr*w + x3] +
                         Ybuf[y *w + xl] +
                         Ybuf[y *w + xr];
                 }

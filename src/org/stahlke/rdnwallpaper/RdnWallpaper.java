@@ -7,6 +7,7 @@ import android.graphics.Canvas;
 import android.graphics.ColorMatrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.Matrix;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.service.wallpaper.WallpaperService;
@@ -295,7 +296,15 @@ public class RdnWallpaper extends WallpaperService {
                     mPaint.setFilterBitmap(true);
                     for(int x = 0; x < mRepeatX; x++)
                     for(int y = 0; y < mRepeatY; y++) {
+                        c.save();
+                        if(y % 2 == 1) {
+                            Matrix m = new Matrix();
+                            m.preScale(-1, 1);
+                            m.postTranslate(mGridW, 0);
+                            c.concat(m);
+                        }
                         c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
+                        c.restore();
                     }
                     c.restore();
 
