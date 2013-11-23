@@ -96,6 +96,10 @@ public class RdnWallpaper extends WallpaperService {
         private Bitmap mBitmap;
         private SharedPreferences mPrefs;
 
+        private float[] mProfileAccum = new float[3];
+        private float[] mProfileTimes = new float[3];
+        private int mProfileTicks = 0;
+
         private final Runnable mDrawCallback = new Runnable() {
             public void run() {
                 drawFrame();
@@ -311,11 +315,25 @@ public class RdnWallpaper extends WallpaperService {
                     long tf = SystemClock.uptimeMillis();
                     long gap = tf - mLastDrawTime;
                     mLastDrawTime = tf;
+
+                    mProfileAccum[0] += gap;
+                    mProfileAccum[1] += t2-t1;
+                    mProfileAccum[2] += tf-t2;
+                    mProfileTicks++;
+
+                    if(mProfileTicks == 10) {
+                        for(int i=0; i<mProfileAccum.length; i++) {
+                            mProfileTimes[i] = mProfileAccum[i] / mProfileTicks;
+                            mProfileAccum[i] = 0;
+                        }
+                        mProfileTicks = 0;
+                    }
+
                     // FIXME
                     c.drawText("time="+t1, 10, 80, mPaint);
-                    c.drawText("gap="+gap, 10, 100, mPaint);
-                    c.drawText("calc="+(t2-t1), 10, 120, mPaint);
-                    c.drawText("draw="+(tf-t2), 10, 140, mPaint);
+                    c.drawText("gap=" +mProfileTimes[0], 10, 100, mPaint);
+                    c.drawText("calc="+mProfileTimes[1], 10, 120, mPaint);
+                    c.drawText("draw="+mProfileTimes[2], 10, 140, mPaint);
 
                     delay -= tf-t1;
                     if(delay < 0) delay = 0;
