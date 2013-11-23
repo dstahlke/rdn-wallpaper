@@ -21,8 +21,9 @@
         <item>p0</item>
         <item>p1</item>
         <item>uskate</item>
-        <item>098,056</item>
         <item>worms</item>
+        <item>plasma</item>
+        <item>colony</item>
     </string-array>
 
     <array name="presets0_0">
@@ -62,15 +63,21 @@
     </array>
 
     <array name="presets1_3">
-        <item>0.1</item>
-        <item>0.098</item>
+        <item>0.08</item>
+        <item>0.0247</item>
         <item>0.056</item>
     </array>
 
     <array name="presets1_4">
         <item>0.08</item>
-        <item>0.0247</item>
-        <item>0.056</item>
+        <item>0.020078</item>
+        <item>0.0514</item>
+    </array>
+
+    <array name="presets1_5">
+        <item>0.08</item>
+        <item>0.024836</item>
+        <item>0.0573</item>
     </array>
 
     <string-array name="palettes0">

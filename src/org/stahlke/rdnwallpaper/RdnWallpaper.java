@@ -285,11 +285,11 @@ public class RdnWallpaper extends WallpaperService {
                         c.translate(-mWidth+1,0);
                     }
 
-                    long t1 = SystemClock.elapsedRealtime();
+                    long t1 = SystemClock.uptimeMillis();
 
                     renderFrame(mBitmap);
 
-                    long t2 = SystemClock.elapsedRealtime();
+                    long t2 = SystemClock.uptimeMillis();
                     c.save();
                     c.scale(mRes, mRes);
                     mPaint.setFilterBitmap(true);
@@ -299,10 +299,11 @@ public class RdnWallpaper extends WallpaperService {
                     }
                     c.restore();
 
-                    long tf = SystemClock.elapsedRealtime();
+                    long tf = SystemClock.uptimeMillis();
                     long gap = tf - mLastDrawTime;
                     mLastDrawTime = tf;
                     // FIXME
+                    c.drawText("time="+t1, 10, 80, mPaint);
                     c.drawText("gap="+gap, 10, 100, mPaint);
                     c.drawText("calc="+(t2-t1), 10, 120, mPaint);
                     c.drawText("draw="+(tf-t2), 10, 140, mPaint);

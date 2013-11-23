@@ -22,7 +22,7 @@ public class PresetsBox extends Preference {
     private static final String ANDROIDNS="http://schemas.android.com/apk/res/android";
 
     private Context mContext;
-    private LinearLayout mButtonsBox;
+    private FlowLayout mButtonsBox;
     private int mFnId;
     private List<SeekBarPreference> mSliders;
 
@@ -38,7 +38,7 @@ public class PresetsBox extends Preference {
 
     private void initPreference(Context context, AttributeSet attrs) {
         mContext = context;
-        mButtonsBox = new LinearLayout(context, attrs);
+        mButtonsBox = new FlowLayout(context, attrs);
         setFunction(0);
     }
 
