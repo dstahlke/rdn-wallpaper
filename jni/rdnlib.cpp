@@ -9,6 +9,8 @@
 #include <android/bitmap.h>
 #include <jni.h>
 
+//#include <Eigen/Array>
+
 #define LOG_TAG "rdn"
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
 #define LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
@@ -17,19 +19,57 @@
 
 float color_matrix[20];
 
+template <typename T>
+T max(const T x, const T y) {
+    return x > y ? x : y;
+}
+
+template <int n>
+struct vector {
+    vector() {
+        v[0] = 0;
+        v[1] = 0;
+    }
+
+    vector(float a, float b) {
+        v[0] = a;
+        v[1] = b;
+    }
+
+    vector<n> &operator+=(const vector<n> &rhs) {
+        for(int i=0; i<n; i++) v[i] += rhs.v[i];
+        return *this;
+    }
+
+    vector<n> operator+(const vector<n> &rhs) const {
+        vector<n> ret = *this;
+        ret += rhs;
+        return ret;
+    }
+
+    vector<n> &operator*=(const float x) {
+        for(int i=0; i<n; i++) v[i] *= x;
+        return *this;
+    }
+
+    vector<n> operator*(const float x) const {
+        vector<n> ret = *this;
+        ret *= x;
+        return ret;
+    }
+
+    float v[n];
+};
+
 struct Grid {
-    Grid(int _w, int _h, int _n) :
-        w(_w), h(_h), n(_n),
-        wh(w*h), whn(wh*n),
-        A(new float[wh*n])
+    Grid(int _w, int _h) :
+        w(_w), h(_h),
+        wh(w*h),
+        A(new vector<2>[wh])
     { }
 
     ~Grid() {
         delete(A);
-    }
-
-    float *getChannel(int i) {
-        return A + wh*i;
     }
 
 //    int detectCheckerBoard() {
@@ -56,8 +96,8 @@ struct Grid {
 //        return instable;
 //    }
 
-    const int w, h, n, wh, whn;
-    float *A;
+    const int w, h, wh;
+    vector<2> *A;
 };
 
 class Palette {
@@ -82,29 +122,17 @@ public:
 struct FunctionBase {
     virtual ~FunctionBase() { }
 
-    virtual float get_diffusion_matrix(float m[]) {
-        LOGE("method get_diffusion_matrix must be overridden");
-    }
+    virtual float get_diffusion_matrix(float m[]) = 0;
 
-    virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
-        LOGE("method compute_dx_dt must be overridden");
-    }
+    virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) = 0;
 
-    virtual void get_background_val(float &A, float &B) {
-        LOGE("method get_background_val must be overridden");
-    }
+    virtual vector<2> get_background_val() = 0;
 
-    virtual void get_seed_val(float &A, float &B, int seed_idx) {
-        LOGE("method get_seed_val must be overridden");
-    }
+    virtual vector<2> get_seed_val(int seed_idx) = 0;
 
-    virtual void set_params(float *p, int len) {
-        LOGE("method set_params must be overridden");
-    }
+    virtual void set_params(float *p, int len) = 0;
 
-    virtual Palette *get_palette(int id) {
-        LOGE("method get_palette must be overridden");
-    }
+    virtual Palette *get_palette(int id) = 0;
 };
 
 struct GinzburgLandau : public FunctionBase {
@@ -121,13 +149,14 @@ struct GinzburgLandau : public FunctionBase {
         delete(pal_gl1);
     }
 
-    virtual void get_background_val(float &U, float &V) {
-        U = V = 0;
+    virtual vector<2> get_background_val() {
+        return vector<2>(1, 0);
     }
 
-    virtual void get_seed_val(float &U, float &V, int seed_idx) {
-        U = ((seed_idx*5)%7)/7.0F*2.0F-1.0F;
-        V = ((seed_idx*9)%13)/13.0F*2.0F-1.0F;
+    virtual vector<2> get_seed_val(int seed_idx) {
+        float U = ((seed_idx*5)%7)/7.0F*2.0F-1.0F;
+        float V = ((seed_idx*9)%13)/13.0F*2.0F-1.0F;
+        return vector<2>(U, V);
     }
 
     virtual void set_params(float *p, int len) {
@@ -149,18 +178,16 @@ struct GinzburgLandau : public FunctionBase {
     }
 
     virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
-        float *Uibuf = Gi.getChannel(0) + y*w;
-        float *Vibuf = Gi.getChannel(1) + y*w;
-        float *Uobuf = Go.getChannel(0) + y*w;
-        float *Vobuf = Go.getChannel(1) + y*w;
+        vector<2> *ibuf = Gi.A + y*w;
+        vector<2> *obuf = Go.A + y*w;
 
         for(int x=0; x<w; x++) {
-            float  U = Uibuf[x];
-            float  V = Vibuf[x];
+            float  U = ibuf[x].v[0];
+            float  V = ibuf[x].v[1];
             float r2 = U*U + V*V;
 
-            Uobuf[x] = U - (U - beta*V)*r2; // + D*(lU - alpha*lV);
-            Vobuf[x] = V - (V + beta*U)*r2; // + D*(lV + alpha*lU);
+            obuf[x].v[0] = U - (U - beta*V)*r2; // + D*(lU - alpha*lV);
+            obuf[x].v[1] = V - (V + beta*U)*r2; // + D*(lV + alpha*lU);
             // From Ready (https://code.google.com/p/reaction-diffusion)
             //Uobuf[x] = DU*lU + alpha*U - gamma*V + (-beta*U + delta*V)*r2;
             //Vobuf[x] = DV*lV + alpha*V + gamma*U + (-beta*V - delta*U)*r2;
@@ -176,20 +203,22 @@ struct GinzburgLandau : public FunctionBase {
                 accum_rk = 0;
                 cnt = 0;
             }
-            float *gridA = G.getChannel(0) + y * G.w;
-            float *gridB = G.getChannel(1) + y * G.w;
-            float *gridDA = DG.getChannel(0) + y * G.w;
-            float *gridDB = DG.getChannel(1) + y * G.w;
+            vector<2> *gridX = G .A + y * G.w;
+            vector<2> *gridD = DG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
-                float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
-                float rk = gridDA[x]*gridDA[x] + gridDB[x]*gridDB[x];
+                float A = gridX[x].v[0];
+                float B = gridX[x].v[1];
+                float DA = gridD[x].v[0];
+                float DB = gridD[x].v[1];
+                float rv = A*A + B*B;
+                float rk = DA*DA + DB*DB;
                 accum_rv += rv;
                 accum_rk += rk;
                 rv /= avg_rv;
                 rk /= avg_rk;
                 int red   = (rv-rk/4) * 150;
                 int green = (rv-rk/2) * 100;
-                int blue  = green + gridA[x] * 30;
+                int blue  = green + A * 30;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
@@ -210,15 +239,18 @@ struct GinzburgLandau : public FunctionBase {
                 accum_rv = 0;
                 cnt = 0;
             }
-            float *gridA = G.getChannel(0) + y * G.w;
-            float *gridB = G.getChannel(1) + y * G.w;
-            float *gridDA = DG.getChannel(0) + y * G.w;
-            float *gridDB = DG.getChannel(1) + y * G.w;
-            float *gridLA = LG.getChannel(0) + y * G.w;
-            float *gridLB = LG.getChannel(1) + y * G.w;
+            vector<2> *gridX = G .A + y * G.w;
+            vector<2> *gridD = DG.A + y * G.w;
+            vector<2> *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
-                float rv = gridA[x]*gridA[x] + gridB[x]*gridB[x];
-                float lv = gridDA[x]*gridLA[x] + gridDB[x]*gridLB[x];
+                float A = gridX[x].v[0];
+                float B = gridX[x].v[1];
+                float DA = gridD[x].v[0];
+                float DB = gridD[x].v[1];
+                float LA = gridL[x].v[0];
+                float LB = gridL[x].v[1];
+                float rv = A*A + B*B;
+                float lv = DA*LA + DB*LB;
                 accum_rv += rv;
                 rv /= avg_rv;
                 lv /= avg_rv;
@@ -264,18 +296,19 @@ struct GrayScott : public FunctionBase {
         delete(pal_gs1);
     }
 
-    virtual void get_background_val(float &A, float &B) {
-        A=1; B=0;
+    virtual vector<2> get_background_val() {
+        return vector<2>(1, 0);
     }
 
-    virtual void get_seed_val(float &A, float &B, int seed_idx) {
+    virtual vector<2> get_seed_val(int seed_idx) {
         //get_background_val(A, B);
         //switch(seed_idx % 2) {
         //    case 0:  A += 0.0F; B += 0.1F; break;
         //    default: A += 0.1F; B += 0.0F; break;
         //}
-        A = ((seed_idx*5)%7)/7.0F;
-        B = ((seed_idx*9)%13)/13.0F;
+        float A = ((seed_idx*5)%7)/7.0F;
+        float B = ((seed_idx*9)%13)/13.0F;
+        return vector<2>(A, B);
     }
 
     virtual void set_params(float *p, int len) {
@@ -295,36 +328,36 @@ struct GrayScott : public FunctionBase {
     }
 
     virtual void compute_dx_dt(Grid &Gi, Grid &Go, Grid &Gl, int w, int y) {
-        float *Ai = Gi.getChannel(0) + y*w;
-        float *Bi = Gi.getChannel(1) + y*w;
-        float *Ao = Go.getChannel(0) + y*w;
-        float *Bo = Go.getChannel(1) + y*w;
-        float *Al = Gl.getChannel(0) + y*w;
-        float *Bl = Gl.getChannel(1) + y*w;
+        vector<2> *ibuf = Gi.A + y*w;
+        vector<2> *obuf = Go.A + y*w;
 
         for(int x=0; x<w; x++) {
-            float da = Al[x];
-            float db = Bl[x];
-            float ai = Ai[x];
-            float bi = Bi[x];
+            float ai = ibuf[x].v[0];
+            float bi = ibuf[x].v[1];
 
             //Ao[x] = 1 - ai - mu*ai*bi*bi + D*da;
             //Bo[x] = mu*ai*bi*bi - phi*bi + D*db;
-            Ao[x] = /* 2*D*da */ - ai*bi*bi + F*(1-ai);
-            Bo[x] = /*   D*db + */ ai*bi*bi - (F+k)*bi;
+            obuf[x].v[0] = /* 2*D*da */ - ai*bi*bi + F*(1-ai);
+            obuf[x].v[1] = /*   D*db + */ ai*bi*bi - (F+k)*bi;
         }
     }
 
     struct PaletteGS0 : public Palette {
         void render_line(uint32_t *pix_line, Grid &G, Grid &DG, Grid &LG, int y) {
-            float *gridA = G.getChannel(0) + y * G.w;
-            float *gridB = G.getChannel(1) + y * G.w;
-            float *gridDA = DG.getChannel(0) + y * G.w;
-            float *gridDB = DG.getChannel(1) + y * G.w;
+            vector<2> *gridX = G .A + y * G.w;
+            vector<2> *gridD = DG.A + y * G.w;
+            //vector<2> *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
-                int red   = (1-gridA[x]) * 200;
-                int green = gridDA[x] * 20000;
-                int blue  = gridB [x] * 1000;
+                float A = gridX[x].v[0];
+                float B = gridX[x].v[1];
+                float DA = gridD[x].v[0];
+                //float DB = gridD[x].v[1];
+                //float LA = gridL[x].v[0];
+                //float LB = gridL[x].v[1];
+
+                int red   = (1-A) * 200;
+                int green = DA * 20000;
+                int blue  = B * 1000;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
@@ -340,19 +373,23 @@ struct GrayScott : public FunctionBase {
                 accum_rv = 0;
                 cnt = 0;
             }
-            float *gridA = G.getChannel(0) + y * G.w;
-            float *gridB = G.getChannel(1) + y * G.w;
-            float *gridDA = DG.getChannel(0) + y * G.w;
-            float *gridDB = DG.getChannel(1) + y * G.w;
-            float *gridLA = LG.getChannel(0) + y * G.w;
-            float *gridLB = LG.getChannel(1) + y * G.w;
+            //vector<2> *gridX = G .A + y * G.w;
+            //vector<2> *gridD = DG.A + y * G.w;
+            vector<2> *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
-                float rv = parent.D * gridLB[x];
-                float gv = parent.D * gridLA[x];
+                //float A = gridX[x].v[0];
+                //float B = gridX[x].v[1];
+                //float DA = gridD[x].v[0];
+                //float DB = gridD[x].v[1];
+                float LA = gridL[x].v[0];
+                float LB = gridL[x].v[1];
+
+                float rv = parent.D * LB;
+                float gv = parent.D * LA;
                 if(rv > 0) accum_rv += rv;
-                //float w = sqrtf(gridLA[x]*gridLA[x] + gridLB[x]*gridLB[x]);
+                //float w = sqrtf(LA*LA + LB*LB);
                 int red   = rv * 60000;
-                int green = 0; //parent.D * gridLB[x] * 20000;
+                int green = 0; //parent.D * LB * 20000;
                 int blue  = gv * 60000;
 
                 pix_line[x] = to_rgb24(red, green, blue);
@@ -381,11 +418,12 @@ struct GrayScott : public FunctionBase {
 };
 
 struct RdnGrids {
+    static const int n = 2; // FIXME
     RdnGrids(int _w, int _h) :
         w(_w), h(_h),
-        gridY(w, h, 2),
-        gridK(w, h, 2),
-        gridL(w, h, 2)
+        gridY(w, h),
+        gridK(w, h),
+        gridL(w, h)
     {
         reset_dt();
         reset_cur_instable();
@@ -401,29 +439,20 @@ struct RdnGrids {
     }
 
     void reset_grid(FunctionBase *fn) {
-        float A, B;
-        fn->get_background_val(A, B);
-        for(int y = 0; y < h; y++) {
-            float *gridYA = gridY.getChannel(0) + y * w;
-            float *gridYB = gridY.getChannel(1) + y * w;
-            for(int x = 0; x < w; x++) {
-                gridYA[x] = A;
-                gridYB[x] = B;
-            }
+        vector<n> bgval = fn->get_background_val();
+        for(int i = 0; i < gridY.wh; i++) {
+            gridY.A[i] = bgval;
         }
 
         for(int seed_idx = 0; seed_idx < 20; seed_idx++) {
             int sr = 20;
-            float A, B;
-            fn->get_seed_val(A, B, seed_idx);
+            vector<n> seedval = fn->get_seed_val(seed_idx);
             int x0 = rand() % (w - sr);
             int y0 = rand() % (h - sr);
             for(int y = y0; y < y0+sr; y++) {
-                float *gridYA = gridY.getChannel(0) + y * w;
-                float *gridYB = gridY.getChannel(1) + y * w;
+                vector<n> *buf = gridY.A + y * w;
                 for(int x = x0; x < x0+sr; x++) {
-                    gridYA[x] = A;
-                    gridYB[x] = B;
+                    buf[x] = seedval;
                 }
             }
         }
@@ -433,32 +462,29 @@ struct RdnGrids {
     }
 
     void compute_laplacian() {
+        vector<n> *Ybuf = gridY.A;
+        vector<n> *Lbuf = gridL.A;
         for(int y=0; y<h; y++) {
-            for(int chan=0; chan<gridY.n; chan++) {
-                float *Ybuf = gridY.getChannel(chan);
-                float *Lbuf = gridL.getChannel(chan);
-                int yl = y>  0 ? y-1 : h-1;
-                int yr = y<h-1 ? y+1 :   0;
-                for(int x=0; x<w; x++) {
-                    int xl = x>  0 ? x-1 : w-1;
-                    int xr = x<w-1 ? x+1 :   0;
-                    // Klein bottle topology
-                    int x2 = y==0 ? w-1-x : x;
-                    int x3 = y==h-1 ? w-1-x : x;
-                    Lbuf[y*w+x] =
-                        Ybuf[y *w + x ] * (-4) +
-                        Ybuf[yl*w + x2] +
-                        Ybuf[yr*w + x3] +
-                        Ybuf[y *w + xl] +
-                        Ybuf[y *w + xr];
-                }
+            int yl = y>  0 ? y-1 : h-1;
+            int yr = y<h-1 ? y+1 :   0;
+            for(int x=0; x<w; x++) {
+                int xl = x>  0 ? x-1 : w-1;
+                int xr = x<w-1 ? x+1 :   0;
+                // Klein bottle topology
+                int x2 = y==0 ? w-1-x : x;
+                int x3 = y==h-1 ? w-1-x : x;
+                Lbuf[y*w+x] =
+                    Ybuf[y *w + x ] * (-4.0f) +
+                    Ybuf[yl*w + x2] +
+                    Ybuf[yr*w + x3] +
+                    Ybuf[y *w + xl] +
+                    Ybuf[y *w + xr];
             }
         }
     }
 
     void step(FunctionBase *fn) {
-        const int n = gridY.n;
-        float m[25]; // FIXME - n**2
+        float m[n*n];
         float diffusion_norm = fn->get_diffusion_matrix(m);
         float diffusion_stability = 1.0 / (diffusion_norm * 4.0);
         diffusion_stability *= 0.95;
@@ -484,13 +510,13 @@ struct RdnGrids {
                 if(lap_dt > diffusion_stability) lap_dt = diffusion_stability;
 
                 compute_laplacian();
-                for(int chanY=0; chanY<n; chanY++)
-                for(int chanL=0; chanL<n; chanL++) {
-                    float *Ybuf = gridY.getChannel(chanY);
-                    float *Lbuf = gridL.getChannel(chanL);
-                    float v = m[chanY*n + chanL] * lap_dt;
-                    for(int i=0; i<gridY.wh; i++) {
-                        Ybuf[i] += Lbuf[i] * v;
+                vector<n> *Ybuf = gridY.A;
+                vector<n> *Lbuf = gridL.A;
+                for(int i=0; i<gridY.wh; i++) {
+                    for(int j=0; j<n; j++)
+                    for(int k=0; k<n; k++) {
+                    float v = m[j*n + k] * lap_dt;
+                        Ybuf[i].v[j] += Lbuf[i].v[k] * v;
                     }
                 }
 
@@ -503,20 +529,22 @@ struct RdnGrids {
 
             float limit_d = 0.5;
 
-            for(int i=0; i<gridY.whn; i++) {
-                float d = gridK.A[i] * cur_dt;
-                float ad = fabsf(d);
+            for(int i=0; i<gridY.wh; i++) {
+                vector<n> d = gridK.A[i] * cur_dt;
+                float ad = max(fabsf(d.v[0]), fabsf(d.v[1])); // FIXME
                 if(ad > limit_d) {
                     cur_dt *= limit_d / ad;
                     LOGI("ad=%g dt=%g", ad, cur_dt);
-                    d = (d>0) ? limit_d : -limit_d;
+                    for(int j=0; j<n; j++) {
+                        d.v[j] = (d.v[j]>0) ? limit_d : -limit_d;
+                    }
                     since_instable = 0;
                 }
 
                 gridY.A[i] += d;
             }
 
-            if(!isfinite(gridY.getChannel(0)[0])) {
+            if(!isfinite(gridY.A[0].v[0])) {
                 reset_grid(fn);
             }
         }
@@ -578,7 +606,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
         LOGE("AndroidBitmap_lockPixels() failed ! error=%d", ret);
     }
 
-    if (!rdn || rdn->w != info.width || rdn->h != info.height) {
+    if (!rdn || rdn->w != (int)info.width || rdn->h != (int)info.height) {
         delete(rdn);
         rdn = new RdnGrids(info.width, info.height);
         rdn->reset_grid(fn);
