@@ -32,29 +32,29 @@ struct Grid {
         return A + wh*i;
     }
 
-    int detectCheckerBoard() {
-        float limit = 0.01;
-        float la = -limit;
-        float lb =  limit;
-        int instable = 0;
-        for(int j=0; j<n; j++) {
-            float *p = getChannel(j);
-            int l = wh-3-3*w;
-            int w2 = w*2;
-            int w3 = w*3;
-            for(int i=0; i<l; i++) {
-                if(
-            p[i   ] < la && p[i+1   ] > lb && p[i+2   ] < la && // p[i+3   ] > lb &&
-            p[i+w ] > lb && p[i+1+w ] < la && p[i+2+w ] > lb && // p[i+3+w ] < la &&
-            p[i+w2] < la && p[i+1+w2] > lb && p[i+2+w2] < la // && p[i+3+w2] > lb &&
-            //p[i+w3] > lb && p[i+1+w3] < la && p[i+2+w3] > lb && p[i+3+w3] < la
-                ) {
-                    instable++;
-                }
-            }
-        }
-        return instable;
-    }
+//    int detectCheckerBoard() {
+//        float limit = 0.01;
+//        float la = -limit;
+//        float lb =  limit;
+//        int instable = 0;
+//        for(int j=0; j<n; j++) {
+//            float *p = getChannel(j);
+//            int l = wh-3-3*w;
+//            int w2 = w*2;
+//            int w3 = w*3;
+//            for(int i=0; i<l; i++) {
+//                if(
+//            p[i   ] < la && p[i+1   ] > lb && p[i+2   ] < la && // p[i+3   ] > lb &&
+//            p[i+w ] > lb && p[i+1+w ] < la && p[i+2+w ] > lb && // p[i+3+w ] < la &&
+//            p[i+w2] < la && p[i+1+w2] > lb && p[i+2+w2] < la // && p[i+3+w2] > lb &&
+//            //p[i+w3] > lb && p[i+1+w3] < la && p[i+2+w3] > lb && p[i+3+w3] < la
+//                ) {
+//                    instable++;
+//                }
+//            }
+//        }
+//        return instable;
+//    }
 
     const int w, h, n, wh, whn;
     float *A;
@@ -463,43 +463,38 @@ struct RdnGrids {
         float diffusion_stability = 1.0 / (diffusion_norm * 4.0);
         diffusion_stability *= 0.95;
 
-        for(int iter=0; iter<5; iter++) {
-            compute_laplacian();
-            //while(gridL.detectCheckerBoard()) {
-            //    LOGI("cur_dt=%g si=%d", cur_dt, since_instable);
-            //    cur_dt *= 0.99;
-            //    for(int chan=0; chan<n; chan++) {
-            //        float *Ybuf = gridY.getChannel(chan);
-            //        float *Lbuf = gridL.getChannel(chan);
-            //        for(int i=0; i<gridY.wh; i++) {
-            //            Ybuf[i] += Lbuf[i] / 8.0 * 0.1;
-            //        }
-            //    }
-            //    compute_laplacian();
-            //    since_instable = 0;
-            //}
+        LOGI("dt=%g, ds=%g", cur_dt, diffusion_stability);
 
+        float max_dt = 1;
+
+        for(int iter=0; iter<5; iter++) {
             since_instable++;
             if(since_instable > 1000) {
                 cur_dt *= 1.05;
             } else {
                 cur_dt *= 1.0001;
             }
+            if(cur_dt > max_dt) cur_dt = max_dt;
 
-            if(cur_dt > diffusion_stability) {
-                cur_dt = diffusion_stability;
-            }
+            // FIXME - try to keep things in cache
 
-            // FIXME - avoid multiple passes to maybe keep it all in cache
+            float lap_to_go = cur_dt;
+            while(lap_to_go > 0) {
+                float lap_dt = lap_to_go;
+                if(lap_dt > diffusion_stability) lap_dt = diffusion_stability;
 
-            for(int chanY=0; chanY<n; chanY++)
-            for(int chanL=0; chanL<n; chanL++) {
-                float *Ybuf = gridY.getChannel(chanY);
-                float *Lbuf = gridL.getChannel(chanL);
-                float v = m[chanY*n + chanL] * cur_dt;
-                for(int i=0; i<gridY.wh; i++) {
-                    Ybuf[i] += Lbuf[i] * v;
+                compute_laplacian();
+                for(int chanY=0; chanY<n; chanY++)
+                for(int chanL=0; chanL<n; chanL++) {
+                    float *Ybuf = gridY.getChannel(chanY);
+                    float *Lbuf = gridL.getChannel(chanL);
+                    float v = m[chanY*n + chanL] * lap_dt;
+                    for(int i=0; i<gridY.wh; i++) {
+                        Ybuf[i] += Lbuf[i] * v;
+                    }
                 }
+
+                lap_to_go -= lap_dt;
             }
 
             for(int y=0; y<h; y++) {
