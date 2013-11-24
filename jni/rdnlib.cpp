@@ -10,7 +10,9 @@
 #include <jni.h>
 
 #include <Eigen/Core>
-#include <Eigen/SVD>
+//#include <Eigen/SVD>
+
+//#include "prof.h"
 
 #define LOG_TAG "rdn"
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
@@ -19,11 +21,6 @@
 #define CLIP_BYTE(v) (v < 0 ? 0 : v > 255 ? 255 : v)
 
 float color_matrix[20];
-
-template <typename T>
-T max(const T x, const T y) {
-    return x > y ? x : y;
-}
 
 #define vecn Eigen::Matrix<float, n, 1>
 #define matnn Eigen::Matrix<float, n, n>
@@ -40,30 +37,6 @@ struct Grid {
         delete(A);
     }
 
-//    int detectCheckerBoard() {
-//        float limit = 0.01;
-//        float la = -limit;
-//        float lb =  limit;
-//        int instable = 0;
-//        for(int j=0; j<n; j++) {
-//            float *p = getChannel(j);
-//            int l = wh-3-3*w;
-//            int w2 = w*2;
-//            int w3 = w*3;
-//            for(int i=0; i<l; i++) {
-//                if(
-//            p[i   ] < la && p[i+1   ] > lb && p[i+2   ] < la && // p[i+3   ] > lb &&
-//            p[i+w ] > lb && p[i+1+w ] < la && p[i+2+w ] > lb && // p[i+3+w ] < la &&
-//            p[i+w2] < la && p[i+1+w2] > lb && p[i+2+w2] < la // && p[i+3+w2] > lb &&
-//            //p[i+w3] > lb && p[i+1+w3] < la && p[i+2+w3] > lb && p[i+3+w3] < la
-//                ) {
-//                    instable++;
-//                }
-//            }
-//        }
-//        return instable;
-//    }
-
     const int w, h, wh;
     vecn *A;
 };
@@ -74,9 +47,9 @@ public:
     virtual void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y) = 0;
 
     static inline int to_rgb24(float r, float g, float b) {
-        if(r < 0) r = 0;
-        if(g < 0) g = 0;
-        if(b < 0) b = 0;
+        //if(r < 0) r = 0;
+        //if(g < 0) g = 0;
+        //if(b < 0) b = 0;
         float *cm = color_matrix;
         float rp = r*cm[0] + g*cm[1] + b*cm[2] + cm[4]; cm += 5;
         float gp = r*cm[0] + g*cm[1] + b*cm[2] + cm[4]; cm += 5;
@@ -93,15 +66,12 @@ struct FunctionBase {
     virtual ~FunctionBase() { }
 
     virtual matnn get_diffusion_matrix() = 0;
-
+    virtual float get_diffusion_norm() = 0;
+    virtual float get_dt() = 0;
     virtual void compute_dx_dt(vecn *buf, int w, float dt) = 0;
-
     virtual vecn get_background_val() = 0;
-
     virtual vecn get_seed_val(int seed_idx) = 0;
-
     virtual void set_params(float *p, int len) = 0;
-
     virtual Palette<n> *get_palette(int id) = 0;
 };
 
@@ -149,10 +119,16 @@ struct GinzburgLandau : public FunctionBase<2> {
 
     virtual matnn get_diffusion_matrix() {
         matnn ret;
-        ret <<
-            D,       -D*alpha,
-            D*alpha, D;
+        ret << D, -D*alpha, D*alpha, D;
         return ret;
+    }
+
+    virtual float get_diffusion_norm() {
+        return D * (1 + fabsf(alpha)); // FIXME
+    }
+
+    virtual float get_dt() {
+        return 0.1;
     }
 
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
@@ -171,7 +147,7 @@ struct GinzburgLandau : public FunctionBase<2> {
             if(y == 0) {
                 avg_rv = accum_rv / cnt;
                 avg_rk = accum_rk / cnt;
-                LOGI("avg=%g,%g", avg_rv, avg_rk);
+                //LOGI("avg=%g,%g", avg_rv, avg_rk);
                 accum_rv = 0;
                 accum_rk = 0;
                 cnt = 0;
@@ -302,6 +278,14 @@ struct GrayScott : public FunctionBase<2> {
         return ret;
     }
 
+    virtual float get_diffusion_norm() {
+        return 2*D;
+    }
+
+    virtual float get_dt() {
+        return 1.5;
+    }
+
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
         for(int x=0; x<w; x++) {
             float ai = buf[x][0];
@@ -387,19 +371,7 @@ struct RdnGrids {
         w(_w), h(_h),
         gridY(w, h),
         gridL(w, h)
-    {
-        reset_dt();
-        reset_cur_instable();
-    }
-
-    void reset_dt() {
-        cur_dt = 0.01;
-    }
-
-    // Allow dt to rapidly rise again
-    void reset_cur_instable() {
-        since_instable = 10000;
-    }
+    { }
 
     void reset_grid(FunctionBase<n> *fn) {
         vecn bgval = fn->get_background_val();
@@ -419,9 +391,6 @@ struct RdnGrids {
                 }
             }
         }
-
-        reset_dt();
-        reset_cur_instable();
     }
 
     void compute_laplacian() {
@@ -430,40 +399,34 @@ struct RdnGrids {
         for(int y=0; y<h; y++) {
             int yl = y>  0 ? y-1 : h-1;
             int yr = y<h-1 ? y+1 :   0;
+            vecn *L = Lbuf + y*w;
+            vecn *Y = Ybuf + y*w;
+            vecn *Yup = Ybuf + yl*w;
+            vecn *Ydn = Ybuf + yr*w;
             for(int x=0; x<w; x++) {
                 int xl = x>  0 ? x-1 : w-1;
                 int xr = x<w-1 ? x+1 :   0;
                 // Klein bottle topology
                 int x2 = y==0 ? w-1-x : x;
                 int x3 = y==h-1 ? w-1-x : x;
-                Lbuf[y*w+x] =
-                    Ybuf[y *w + x ] * (-4.0f) +
-                    Ybuf[yl*w + x2] +
-                    Ybuf[yr*w + x3] +
-                    Ybuf[y *w + xl] +
-                    Ybuf[y *w + xr];
+                L[x] = -4.0f * Y[x] + Yup[x2] + Ydn[x3] + Y[xl] + Y[xr];
             }
         }
     }
 
     void step(FunctionBase<n> *fn) {
         matnn m = fn->get_diffusion_matrix();
-        Eigen::JacobiSVD<matnn, Eigen::NoQRPreconditioner> svd(m);
-        float diffusion_norm = svd.singularValues().array().abs().maxCoeff();
+        //Eigen::JacobiSVD<matnn, Eigen::NoQRPreconditioner> svd(m);
+        float diffusion_norm = fn->get_diffusion_norm();
         float diffusion_stability = 1.0 / (diffusion_norm * 4.0);
         diffusion_stability *= 0.95;
 
-        //LOGI("dt=%g, dn=%g, ds=%g", cur_dt, diffusion_norm, diffusion_stability);
+        float dt = fn->get_dt();
 
-        float max_dt = 2; // FIXME
+        //LOGI("dt=%g, dn=%g, ds=%g", dt, diffusion_norm, diffusion_stability);
 
         for(int iter=0; iter<5; iter++) {
-            since_instable++;
-            //cur_dt *= 1.01;
-            //if(cur_dt > max_dt) cur_dt = max_dt;
-            cur_dt = 0.1; // FIXME
-
-            float lap_to_go = cur_dt;
+            float lap_to_go = dt;
             while(lap_to_go > 0) {
                 float lap_dt = lap_to_go;
                 if(lap_dt > diffusion_stability) lap_dt = diffusion_stability;
@@ -479,25 +442,9 @@ struct RdnGrids {
                 lap_to_go -= lap_dt;
             }
 
-            float limit_d = 0.5;
-
             for(int y=0; y<h; y++) {
                 vecn *bufY = gridY.A + w*y;
-                fn->compute_dx_dt(bufY, w, cur_dt);
-
-                //for(int x=0; x<w; x++) {
-                //    vecn d = bufK[x] * cur_dt;
-                //    float ad = d.cwiseAbs().maxCoeff();
-                //    if(ad > limit_d) {
-                //        cur_dt *= limit_d / ad;
-                //        LOGI("ad=%g dt=%g", ad, cur_dt);
-                //        for(int j=0; j<n; j++) {
-                //            d[j] = (d[j]>0) ? limit_d : -limit_d;
-                //        }
-                //        since_instable = 0;
-                //    }
-                //    bufY[x] += d;
-                //}
+                fn->compute_dx_dt(bufY, w, dt);
             }
 
             if(!std::isfinite(gridY.A[0][0])) {
@@ -514,8 +461,6 @@ struct RdnGrids {
     }
 
     int w, h;
-    float cur_dt;
-    int since_instable;
     Grid<n> gridY;
     Grid<n> gridL;
 };
@@ -526,6 +471,8 @@ FunctionBase<2> *fn_gs = new GrayScott();
 FunctionBase<2> *fn_list[] = { fn_gl, fn_gs };
 FunctionBase<2> *fn = fn_gl;
 Palette<2> *pal = fn->get_palette(0);
+
+//int profile_ticks = -1;
 
 extern "C" {
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
@@ -566,6 +513,17 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
 
     rdn->step(fn);
     rdn->draw(pixels, info.stride, fn, pal);
+
+//    if(profile_ticks == 50) {
+//        monstartup("librdnlib.so");
+//    } else if(profile_ticks == 200) {
+//        LOGI("writing profile");
+//        setenv("CPUPROFILE", "/data/data/org.stahlke.rdnwallpaper/files/gmon.out", 1);
+//        moncleanup();
+//    } else {
+//        if(profile_ticks <= 200) LOGI("ticks=%d", profile_ticks);
+//    }
+//    profile_ticks++;
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
@@ -578,7 +536,6 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
     fn->set_params((float *)params, len);
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
     //rdn->reset_grid();
-    if(rdn) rdn->reset_cur_instable();
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
