@@ -1,0 +1,2 @@
+adb pull /data/data/org.stahlke.rdnwallpaper/files/gmon.out
+/home/dstahlke/apps/android-ndk-r8-crystax-1/toolchains/arm-linux-androideabi-4.6/prebuilt/linux-x86_64/bin/arm-linux-androideabi-gprof obj/local/armeabi-v7a/librdnlib.so | head -n 20

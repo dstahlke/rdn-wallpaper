@@ -2,6 +2,7 @@ bin/
 gen/
 libs/
 obj/
+gmon.out
 
 # Get this from https://bitbucket.org/erublee/eigen-android
 eigen-android/
