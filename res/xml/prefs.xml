@@ -66,6 +66,49 @@
             rdnwallpaper:rate="0.00001"
             rdnwallpaper:format="k: %.4f"
             />
+
+        <!--
+        <org.stahlke.rdnwallpaper.SeekBarPreference
+            android:key="param_2_0"
+            android:defaultValue="0.1"
+            rdnwallpaper:min="0.0001"
+            rdnwallpaper:max="1.0"
+            rdnwallpaper:rate="0.00001"
+            rdnwallpaper:format="D: %.3f"
+            />
+        <org.stahlke.rdnwallpaper.SeekBarPreference
+            android:key="param_2_1"
+            android:defaultValue="0.1"
+            rdnwallpaper:min="-5.0"
+            rdnwallpaper:max="5.0"
+            rdnwallpaper:rate="0.0001"
+            rdnwallpaper:format="alpha: %.3f"
+            />
+        <org.stahlke.rdnwallpaper.SeekBarPreference
+            android:key="param_2_2"
+            android:defaultValue="0.1"
+            rdnwallpaper:min="-5.0"
+            rdnwallpaper:max="5.0"
+            rdnwallpaper:rate="0.0001"
+            rdnwallpaper:format="tau: %.3f"
+            />
+        <org.stahlke.rdnwallpaper.SeekBarPreference
+            android:key="param_2_3"
+            android:defaultValue="0.1"
+            rdnwallpaper:min="-5.0"
+            rdnwallpaper:max="5.0"
+            rdnwallpaper:rate="0.001"
+            rdnwallpaper:format="j0: %.3f"
+            />
+        <org.stahlke.rdnwallpaper.SeekBarPreference
+            android:key="param_2_4"
+            android:defaultValue="0.1"
+            rdnwallpaper:min="-20.0"
+            rdnwallpaper:max="20.0"
+            rdnwallpaper:rate="0.01"
+            rdnwallpaper:format="d: %.3f"
+            />
+        -->
     </PreferenceCategory>
     <PreferenceCategory android:title="Presets">
         <org.stahlke.rdnwallpaper.PresetsBox

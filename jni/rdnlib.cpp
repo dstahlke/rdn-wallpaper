@@ -334,11 +334,11 @@ struct GrayScott : public FunctionBase<2> {
 
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
         for(int x=0; x<w; x++) {
-            float ai = buf[x][0];
-            float bi = buf[x][1];
+            float a = buf[x][0];
+            float b = buf[x][1];
 
-            buf[x][0] += dt * (-ai*bi*bi + F*(1-ai));
-            buf[x][1] += dt * ( ai*bi*bi - (F+k)*bi);
+            buf[x][0] += dt * (-a*b*b + F*(1-a));
+            buf[x][1] += dt * ( a*b*b - (F+k)*b);
         }
     }
 
@@ -452,6 +452,190 @@ struct GrayScott : public FunctionBase<2> {
     Palette<n> *pal_gs2;
 };
 
+struct WackerScholl : public FunctionBase<2> {
+    static const int n = 2;
+
+    WackerScholl() :
+        D(2.0F),
+        alpha(0.02f),
+        tau(0.05f),
+        j0(1.21f),
+        d(8.0f),
+        pal_gs0(new PaletteWS0()),
+        pal_gs1(new PaletteWS1(*this)),
+        pal_gs2(new PaletteWS2(*this))
+    { }
+
+    ~WackerScholl() {
+        delete(pal_gs0);
+        delete(pal_gs1);
+        delete(pal_gs2);
+    }
+
+    virtual vecn get_background_val() {
+        vecn ret;
+        ret[0] = j0/((j0*j0+1)*tau);
+        ret[1] = j0/((j0*j0+1)*tau) + j0;
+        return ret;
+    }
+
+    virtual vecn get_seed_val(int seed_idx) {
+        //get_background_val(A, B);
+        //switch(seed_idx % 2) {
+        //    case 0:  A += 0.0F; B += 0.1F; break;
+        //    default: A += 0.1F; B += 0.0F; break;
+        //}
+        vecn ret = get_background_val();
+        ret[0] += ((seed_idx*5)%7)/7.0F;
+        ret[1] += ((seed_idx*9)%13)/13.0F;
+        return ret;
+    }
+
+    virtual void set_params(float *p, int len) {
+        if(len != 5) {
+            LOGE("params is wrong length: %d", len);
+        }
+        D = p[0];
+        alpha = p[1];
+        tau = p[2];
+        j0 = p[3];
+        d = p[4];
+    }
+
+    virtual matnn get_diffusion_matrix() {
+        matnn ret;
+        ret << D, 0, 0, D*d;
+        return ret;
+    }
+
+    virtual float get_diffusion_norm() {
+        return std::max(D, D*d);
+    }
+
+    virtual float get_dt() {
+        return 1.0;
+    }
+
+    virtual void compute_dx_dt(vecn *buf, int w, float dt) {
+        for(int x=0; x<w; x++) {
+            float a = buf[x][0];
+            float b = buf[x][1];
+
+            buf[x][0] += dt * ((b-a)/((b-a)*(b-a)+1) - tau*a);
+            buf[x][1] += dt * (alpha*(j0-(b-a)));
+        }
+    }
+
+    struct PaletteWS0 : public Palette<n> {
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
+            vecn *gridX = G .A + y * G.w;
+            vecn *gridL = LG.A + y * G.w;
+            for(int x = 0; x < G.w; x++) {
+                float A = gridX[x][0];
+                float B = gridX[x][1];
+                float LA = gridL[x][0];
+
+                float red   = (1-A) * 200;
+                float green = LA * 20000;
+                float blue  = B * 1000;
+
+                pix_line[x] = to_rgb24(red, green, blue);
+            }
+        }
+    };
+
+    struct PaletteWS1 : public Palette<n> {
+        PaletteWS1(WackerScholl &x) : parent(x) { }
+
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
+            if(y == 0) {
+                avg_rv = accum_rv / cnt;
+                accum_rv = 0;
+                cnt = 0;
+            }
+            //vecn *gridX = G .A + y * G.w;
+            //vecn *gridD = DG.A + y * G.w;
+            vecn *gridL = LG.A + y * G.w;
+            for(int x = 0; x < G.w; x++) {
+                //float A = gridX[x][0];
+                //float B = gridX[x][1];
+                float LA = gridL[x][0];
+                float LB = gridL[x][1];
+
+                float rv = parent.D * LB;
+                float gv = parent.D * LA;
+                if(rv > 0) accum_rv += rv;
+                //float w = sqrtf(LA*LA + LB*LB);
+                float red   = rv * 60000;
+                float green = 0; //parent.D * LB * 20000;
+                float blue  = gv * 60000;
+
+                pix_line[x] = to_rgb24(red, green, blue);
+            }
+            cnt += G.w;
+        }
+
+        int cnt;
+        float accum_rv;
+        float avg_rv;
+
+        WackerScholl &parent;
+    };
+
+    struct PaletteWS2 : public Palette<n> {
+        PaletteWS2(WackerScholl &x) : parent(x) { }
+
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
+            if(y == 0) {
+                avg_rv = accum_rv / cnt;
+                accum_rv = 0;
+                cnt = 0;
+            }
+            vecn *gridX = G .A + y * G.w;
+            vecn *gridL = LG.A + y * G.w;
+            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
+            float rv = gridX[0].dot(gridX[0]);
+            for(int x = 0; x < G.w; x++) {
+                int next_x = (x < G.w-1) ? x+1 : 0;
+                float next_rv = gridX[next_x].dot(gridX[next_x]);
+                float lv = parent.D * gridL[x].dot(gridL[x]);
+                accum_rv += rv;
+                float deriv = next_rv - last_rv;
+                if(dir) deriv = -deriv;
+                //rv /= avg_rv;
+                float green = 128.0f + 200.0f * deriv;
+                float blue  = 0;
+                float red   = 0;
+
+                pix_line[x] = to_rgb24(red, green, blue);
+                last_rv = rv;
+                rv = next_rv;
+            }
+            cnt += G.w;
+        }
+
+        int cnt;
+        float accum_rv;
+        float avg_rv;
+
+        WackerScholl &parent;
+    };
+
+    virtual Palette<n> *get_palette(int id) {
+        switch(id) {
+            case 0: return pal_gs0;
+            case 1: return pal_gs1;
+            case 2: return pal_gs2;
+            default: return pal_gs0;
+        }
+    }
+
+    float D, alpha, tau, j0, d;
+    Palette<n> *pal_gs0;
+    Palette<n> *pal_gs1;
+    Palette<n> *pal_gs2;
+};
+
 template <int n>
 struct RdnGrids {
     RdnGrids(int _w, int _h) :
@@ -555,7 +739,8 @@ struct RdnGrids {
 RdnGrids<2> *rdn = NULL;
 FunctionBase<2> *fn_gl = new GinzburgLandau();
 FunctionBase<2> *fn_gs = new GrayScott();
-FunctionBase<2> *fn_list[] = { fn_gl, fn_gs };
+FunctionBase<2> *fn_ws = new WackerScholl();
+FunctionBase<2> *fn_list[] = { fn_gl, fn_gs, fn_ws };
 FunctionBase<2> *fn = fn_gl;
 Palette<2> *pal = fn->get_palette(0);
 
