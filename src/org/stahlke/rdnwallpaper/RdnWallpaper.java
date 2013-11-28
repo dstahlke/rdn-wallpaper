@@ -367,7 +367,8 @@ public class RdnWallpaper extends WallpaperService {
             // Reschedule the next redraw
             mHandler.removeCallbacks(mDrawCallback);
             if (mVisible) {
-                mHandler.postDelayed(mDrawCallback, delay);
+                //mHandler.postDelayed(mDrawCallback, delay);
+                mHandler.post(mDrawCallback);
             }
         }
     }
