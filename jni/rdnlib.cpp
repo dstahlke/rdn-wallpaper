@@ -124,7 +124,8 @@ struct GinzburgLandau : public FunctionBase<2> {
     }
 
     virtual float get_diffusion_norm() {
-        return D * (1 + fabsf(alpha)); // FIXME
+        // This seems to be appropriate, but I don't know exactly why.
+        return D * (1 + fabsf(alpha*alpha));
     }
 
     virtual float get_dt() {
