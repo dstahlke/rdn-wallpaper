@@ -44,31 +44,38 @@ public class PalettesBox extends Preference {
 
         mPrefs = PreferenceManager
                 .getDefaultSharedPreferences(context);
-        // FIXME - highlight selected palette button
-        //mPrefs.registerOnSharedPreferenceChangeListener(this);
 
         setFunction(0);
     }
 
     public void setFunction(int f_id) {
         mFnId = f_id;
+        int pal = mPrefs.getInt("palette"+mFnId, 0);
 
         String[] labels = mContext.getResources().getStringArray(
                 mContext.getResources().getIdentifier(
                     "palettes"+mFnId, "array", mContext.getPackageName()));
 
         mButtonsBox.removeAllViews();
+        RadioGroup rg = new RadioGroup(mContext);
+        rg.setOrientation(RadioGroup.HORIZONTAL);
         for(int i=0; i<labels.length; i++) {
-            Button b = new Button(mContext);
+            RadioButton b = new RadioButton(mContext);
+
             final int ii = i;
             b.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     buttonClicked(ii);
                 }
             });
+
             b.setText(labels[i]);
-            mButtonsBox.addView(b);
+            rg.addView(b);
+
+            b.setChecked(i==pal);
         }
+
+        mButtonsBox.addView(rg);
     }
 
     protected void buttonClicked(int i) {
