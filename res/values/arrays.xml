@@ -15,16 +15,17 @@
         <item>A</item>
         <item>B</item>
         <item>C</item>
+        <item>D</item>
     </string-array>
 
     <string-array name="presets1">
-        <item>p0</item>
-        <item>p1</item>
-        <item>uskate</item>
-        <item>worms</item>
-        <item>plasma</item>
-        <item>colony</item>
-        <item>foo</item>
+        <item>A</item>
+        <item>B</item>
+        <item>C</item>
+        <item>D</item>
+        <item>E</item>
+        <item>F</item>
+        <item>G</item>
     </string-array>
 
     <array name="presets0_0">
@@ -43,6 +44,12 @@
         <item>2.0</item>
         <item>0.0</item>
         <item>2.0</item>
+    </array>
+
+    <array name="presets0_3">
+        <item>2.0</item>
+        <item>1.2</item>
+        <item>4.0</item>
     </array>
 
     <array name="presets1_0">
@@ -90,11 +97,13 @@
     <string-array name="palettes0">
         <item>A</item>
         <item>B</item>
+        <item>C</item>
     </string-array>
 
     <string-array name="palettes1">
         <item>A</item>
         <item>B</item>
+        <item>C</item>
     </string-array>
 
     <string-array name="resolution_labels">

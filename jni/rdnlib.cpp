@@ -44,7 +44,7 @@ struct Grid {
 template <int n>
 class Palette {
 public:
-    virtual void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y) = 0;
+    virtual void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) = 0;
 
     static inline int to_rgb24(float r, float g, float b) {
         //if(r < 0) r = 0;
@@ -57,7 +57,10 @@ public:
         int ri = int(rp);
         int gi = int(gp);
         int bi = int(bp);
-        return 0xff000000 + (CLIP_BYTE(bi)<<16) + (CLIP_BYTE(gi)<<8) + CLIP_BYTE(ri);
+        //accum_r += ri & 7; ri &= 0xf8; if(accum_r > 8) { ri += 8; accum_r -= 8; }
+        //accum_g += gi & 7; gi &= 0xf8; if(accum_g > 8) { gi += 8; accum_g -= 8; }
+        //accum_b += bi & 7; bi &= 0xf8; if(accum_b > 8) { bi += 8; accum_b -= 8; }
+        return 0xff000000 | (CLIP_BYTE(bi)<<16) | (CLIP_BYTE(gi)<<8) | CLIP_BYTE(ri);
     }
 };
 
@@ -83,12 +86,14 @@ struct GinzburgLandau : public FunctionBase<2> {
         alpha(0.0625F),
         beta (1.0F   ),
         pal_gl0(new PaletteGL0()),
-        pal_gl1(new PaletteGL1(*this))
+        pal_gl1(new PaletteGL1(*this)),
+        pal_gl2(new PaletteGL2(*this))
     { }
 
     ~GinzburgLandau() {
         delete(pal_gl0);
         delete(pal_gl1);
+        delete(pal_gl2);
     }
 
     virtual vecn get_background_val() {
@@ -129,7 +134,7 @@ struct GinzburgLandau : public FunctionBase<2> {
     }
 
     virtual float get_dt() {
-        return 0.1;
+        return 0.1 / std::max(2.0f, fabsf(beta));
     }
 
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
@@ -144,7 +149,7 @@ struct GinzburgLandau : public FunctionBase<2> {
     }
 
     struct PaletteGL0 : public Palette<n> {
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y) {
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
             if(y == 0) {
                 avg_rv = accum_rv / cnt;
                 avg_rk = accum_rk / cnt;
@@ -166,9 +171,9 @@ struct GinzburgLandau : public FunctionBase<2> {
                 accum_rk += rk;
                 rv /= avg_rv;
                 rk /= avg_rk;
-                int red   = (rv-rk/4) * 150;
-                int green = (rv-rk/2) * 100;
-                int blue  = green + A * 30;
+                float red   = (rv-rk/4) * 150;
+                float green = (rv-rk/2) * 100;
+                float blue  = green + A * 30;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
@@ -183,7 +188,7 @@ struct GinzburgLandau : public FunctionBase<2> {
     struct PaletteGL1 : public Palette<n> {
         PaletteGL1(GinzburgLandau &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y) {
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
             if(y == 0) {
                 avg_rv = accum_rv / cnt;
                 accum_rv = 0;
@@ -192,20 +197,55 @@ struct GinzburgLandau : public FunctionBase<2> {
             vecn *gridX = G .A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
-                float A = gridX[x][0];
-                float B = gridX[x][1];
-                float LA = gridL[x][0];
-                float LB = gridL[x][1];
-                float rv = A*A + B*B;
-                float lv = LA*LA + LB*LB;
+                float rv = gridX[x].dot(gridX[x]);
+                float lv = parent.D * gridL[x].dot(gridL[x]);
                 accum_rv += rv;
                 rv /= avg_rv;
                 lv /= avg_rv;
-                int green = 0;
-                int blue  = parent.D * lv * 500;
-                int red   = rv * 100 + blue;
+                float green = 0;
+                float blue  = lv * 500;
+                float red   = rv * 100 + blue;
 
                 pix_line[x] = to_rgb24(red, green, blue);
+            }
+            cnt += G.w;
+        }
+
+        int cnt;
+        float accum_rv;
+        float avg_rv;
+
+        GinzburgLandau &parent;
+    };
+
+    struct PaletteGL2 : public Palette<n> {
+        PaletteGL2(GinzburgLandau &x) : parent(x) { }
+
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
+            if(y == 0) {
+                avg_rv = accum_rv / cnt;
+                accum_rv = 0;
+                cnt = 0;
+            }
+            vecn *gridX = G .A + y * G.w;
+            vecn *gridL = LG.A + y * G.w;
+            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
+            float rv = gridX[0].dot(gridX[0]);
+            for(int x = 0; x < G.w; x++) {
+                int next_x = (x < G.w-1) ? x+1 : 0;
+                float next_rv = gridX[next_x].dot(gridX[next_x]);
+                float lv = parent.D * gridL[x].dot(gridL[x]);
+                accum_rv += rv;
+                float deriv = next_rv - last_rv;
+                if(dir) deriv = -deriv;
+                //rv /= avg_rv;
+                float green = 128.0f + 200.0f * deriv;
+                float blue  = 0;
+                float red   = 0;
+
+                pix_line[x] = to_rgb24(red, green, blue);
+                last_rv = rv;
+                rv = next_rv;
             }
             cnt += G.w;
         }
@@ -221,6 +261,7 @@ struct GinzburgLandau : public FunctionBase<2> {
         switch(id) {
             case 0: return pal_gl0;
             case 1: return pal_gl1;
+            case 2: return pal_gl2;
             default: return pal_gl0;
         }
     }
@@ -228,6 +269,7 @@ struct GinzburgLandau : public FunctionBase<2> {
     float D, alpha, beta;
     Palette<n> *pal_gl0;
     Palette<n> *pal_gl1;
+    Palette<n> *pal_gl2;
 };
 
 struct GrayScott : public FunctionBase<2> {
@@ -238,11 +280,14 @@ struct GrayScott : public FunctionBase<2> {
         F(0.01F),
         k(0.049F),
         pal_gs0(new PaletteGS0()),
-        pal_gs1(new PaletteGS1(*this))
+        pal_gs1(new PaletteGS1(*this)),
+        pal_gs2(new PaletteGS2(*this))
     { }
 
     ~GrayScott() {
+        delete(pal_gs0);
         delete(pal_gs1);
+        delete(pal_gs2);
     }
 
     virtual vecn get_background_val() {
@@ -298,7 +343,7 @@ struct GrayScott : public FunctionBase<2> {
     }
 
     struct PaletteGS0 : public Palette<n> {
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y) {
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
             vecn *gridX = G .A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
@@ -306,9 +351,9 @@ struct GrayScott : public FunctionBase<2> {
                 float B = gridX[x][1];
                 float LA = gridL[x][0];
 
-                int red   = (1-A) * 200;
-                int green = LA * 20000;
-                int blue  = B * 1000;
+                float red   = (1-A) * 200;
+                float green = LA * 20000;
+                float blue  = B * 1000;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
@@ -318,7 +363,7 @@ struct GrayScott : public FunctionBase<2> {
     struct PaletteGS1 : public Palette<n> {
         PaletteGS1(GrayScott &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y) {
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
             if(y == 0) {
                 avg_rv = accum_rv / cnt;
                 accum_rv = 0;
@@ -337,11 +382,50 @@ struct GrayScott : public FunctionBase<2> {
                 float gv = parent.D * LA;
                 if(rv > 0) accum_rv += rv;
                 //float w = sqrtf(LA*LA + LB*LB);
-                int red   = rv * 60000;
-                int green = 0; //parent.D * LB * 20000;
-                int blue  = gv * 60000;
+                float red   = rv * 60000;
+                float green = 0; //parent.D * LB * 20000;
+                float blue  = gv * 60000;
 
                 pix_line[x] = to_rgb24(red, green, blue);
+            }
+            cnt += G.w;
+        }
+
+        int cnt;
+        float accum_rv;
+        float avg_rv;
+
+        GrayScott &parent;
+    };
+
+    struct PaletteGS2 : public Palette<n> {
+        PaletteGS2(GrayScott &x) : parent(x) { }
+
+        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
+            if(y == 0) {
+                avg_rv = accum_rv / cnt;
+                accum_rv = 0;
+                cnt = 0;
+            }
+            vecn *gridX = G .A + y * G.w;
+            vecn *gridL = LG.A + y * G.w;
+            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
+            float rv = gridX[0].dot(gridX[0]);
+            for(int x = 0; x < G.w; x++) {
+                int next_x = (x < G.w-1) ? x+1 : 0;
+                float next_rv = gridX[next_x].dot(gridX[next_x]);
+                float lv = parent.D * gridL[x].dot(gridL[x]);
+                accum_rv += rv;
+                float deriv = next_rv - last_rv;
+                if(dir) deriv = -deriv;
+                //rv /= avg_rv;
+                float green = 128.0f + 200.0f * deriv;
+                float blue  = 0;
+                float red   = 0;
+
+                pix_line[x] = to_rgb24(red, green, blue);
+                last_rv = rv;
+                rv = next_rv;
             }
             cnt += G.w;
         }
@@ -357,6 +441,7 @@ struct GrayScott : public FunctionBase<2> {
         switch(id) {
             case 0: return pal_gs0;
             case 1: return pal_gs1;
+            case 2: return pal_gs2;
             default: return pal_gs0;
         }
     }
@@ -364,6 +449,7 @@ struct GrayScott : public FunctionBase<2> {
     float D, F, k;
     Palette<n> *pal_gs0;
     Palette<n> *pal_gs1;
+    Palette<n> *pal_gs2;
 };
 
 template <int n>
@@ -454,10 +540,10 @@ struct RdnGrids {
         }
     }
 
-    void draw(void *pixels, int stride, FunctionBase<n> *fn, Palette<n> *pal) {
+    void draw(void *pixels, int stride, FunctionBase<n> *fn, Palette<n> *pal, int dir) {
         for(int y = 0; y < h; y++) {
             uint32_t *pix_line = (uint32_t *)((char *)pixels + y * stride);
-            pal->render_line(pix_line, gridY, gridL, y);
+            pal->render_line(pix_line, gridY, gridL, y, dir);
         }
     }
 
@@ -476,8 +562,10 @@ Palette<2> *pal = fn->get_palette(0);
 //int profile_ticks = -1;
 
 extern "C" {
+    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
+        JNIEnv *env, jobject obj);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
-        JNIEnv *env, jobject obj, jobject bitmap);
+        JNIEnv *env, jobject obj, jobject bitmap, jint dir);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
         JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params, jint pal);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
@@ -487,7 +575,7 @@ extern "C" {
 };
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
-    JNIEnv *env, jobject obj, jobject bitmap
+    JNIEnv *env, jobject obj, jobject bitmap, jint dir
 ) {
     int ret;
     AndroidBitmapInfo info;
@@ -512,8 +600,13 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
         rdn->reset_grid(fn);
     }
 
-    rdn->step(fn);
-    rdn->draw(pixels, info.stride, fn, pal);
+    rdn->draw(pixels, info.stride, fn, pal, dir);
+}
+
+JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
+    JNIEnv *env, jobject obj
+) {
+    if(rdn) rdn->step(fn);
 
 //    if(profile_ticks == 50) {
 //        monstartup("librdnlib.so");

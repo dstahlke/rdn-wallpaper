@@ -14,12 +14,14 @@ import android.service.wallpaper.WallpaperService;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
+import android.graphics.PixelFormat;
 
 public class RdnWallpaper extends WallpaperService {
     public static final String TAG = "rdn";
 
     // jni method
-    public static native void renderFrame(Bitmap bitmap);
+    public static native void evolve();
+    public static native void renderFrame(Bitmap bitmap, int dir);
     public static native void setParams(int fn_idx, float[] params, int pal_idx);
     public static native void setColorMatrix(float[] cm);
     public static native void resetGrid();
@@ -96,8 +98,8 @@ public class RdnWallpaper extends WallpaperService {
         private Bitmap mBitmap;
         private SharedPreferences mPrefs;
 
-        private float[] mProfileAccum = new float[3];
-        private float[] mProfileTimes = new float[3];
+        private float[] mProfileAccum = new float[4];
+        private float[] mProfileTimes = new float[4];
         private int mProfileTicks = 0;
 
         private final Runnable mDrawCallback = new Runnable() {
@@ -284,6 +286,7 @@ public class RdnWallpaper extends WallpaperService {
             try {
                 c = holder.lockCanvas();
                 if (c != null) {
+                    holder.setFormat(PixelFormat.RGBA_8888);
                     c.save();
                     if(mDoRotate) {
                         c.rotate(-90);
@@ -292,24 +295,39 @@ public class RdnWallpaper extends WallpaperService {
 
                     long t1 = SystemClock.uptimeMillis();
 
-                    renderFrame(mBitmap);
+                    evolve();
 
                     long t2 = SystemClock.uptimeMillis();
+
+                    long t3 = SystemClock.uptimeMillis();
                     c.save();
                     c.scale(mRes, mRes);
                     mPaint.setFilterBitmap(true);
+
+                    renderFrame(mBitmap, 0);
                     for(int x = 0; x < mRepeatX; x++)
                     for(int y = 0; y < mRepeatY; y++) {
-                        c.save();
-                        if(y % 2 == 1) {
-                            Matrix m = new Matrix();
-                            m.preScale(-1, 1);
-                            m.postTranslate(mWidth/mRes, 0);
-                            c.concat(m);
+                        if(y % 2 == 0) {
+                            c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
                         }
-                        c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
-                        c.restore();
                     }
+
+                    if(mRepeatY > 1) {
+                        renderFrame(mBitmap, 1);
+                    }
+                    c.save();
+                    Matrix m = new Matrix();
+                    m.preScale(-1, 1);
+                    m.postTranslate(mGridW*mRepeatX, 0);
+                    c.concat(m);
+                    for(int x = 0; x < mRepeatX; x++)
+                    for(int y = 0; y < mRepeatY; y++) {
+                        if(y % 2 == 1) {
+                            c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
+                        }
+                    }
+                    c.restore();
+
                     c.restore();
 
                     long tf = SystemClock.uptimeMillis();
@@ -318,7 +336,8 @@ public class RdnWallpaper extends WallpaperService {
 
                     mProfileAccum[0] += gap;
                     mProfileAccum[1] += t2-t1;
-                    mProfileAccum[2] += tf-t2;
+                    mProfileAccum[2] += t3-t2;
+                    mProfileAccum[3] += tf-t2;
                     mProfileTicks++;
 
                     if(mProfileTicks == 10) {
@@ -333,7 +352,8 @@ public class RdnWallpaper extends WallpaperService {
                     c.drawText("time="+t1, 10, 80, mPaint);
                     c.drawText("gap=" +mProfileTimes[0], 10, 100, mPaint);
                     c.drawText("calc="+mProfileTimes[1], 10, 120, mPaint);
-                    c.drawText("draw="+mProfileTimes[2], 10, 140, mPaint);
+                    c.drawText("rend="+mProfileTimes[2], 10, 140, mPaint);
+                    c.drawText("draw="+mProfileTimes[3], 10, 160, mPaint);
 
                     delay -= tf-t1;
                     if(delay < 0) delay = 0;
