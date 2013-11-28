@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+<color name="custom_theme_color">#20000000</color>
+<style name="PreferencesTheme" parent="@android:style/Theme.WallpaperSettings">
+    <item name="android:windowBackground">@color/custom_theme_color</item>
+</style>
+</resources>
