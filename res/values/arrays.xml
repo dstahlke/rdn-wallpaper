@@ -24,6 +24,7 @@
         <item>worms</item>
         <item>plasma</item>
         <item>colony</item>
+        <item>foo</item>
     </string-array>
 
     <array name="presets0_0">
@@ -78,6 +79,12 @@
         <item>0.08</item>
         <item>0.024836</item>
         <item>0.0573</item>
+    </array>
+
+    <array name="presets1_6">
+        <item>0.08</item>
+        <item>0.025230</item>
+        <item>0.0511</item>
     </array>
 
     <string-array name="palettes0">

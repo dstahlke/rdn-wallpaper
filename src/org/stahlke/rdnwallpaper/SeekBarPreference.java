@@ -52,7 +52,7 @@ public class SeekBarPreference extends Preference {
         private final void init() {
             mTextPaint = new Paint();
             mTextPaint.setAntiAlias(true);
-            mTextPaint.setTextSize(24);
+            mTextPaint.setTextSize(30);
             mTextPaint.setStrokeWidth(2);
             setPadding(3, 3, 3, 3);
         }

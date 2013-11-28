@@ -13,7 +13,7 @@
         <activity
             android:name="RdnPrefs"
             android:launchMode="standard"
-            android:theme="@android:style/Theme.WallpaperSettings">
+            android:theme="@style/PreferencesTheme">
             <intent-filter>
                 <category android:name="android.intent.category.PREFERENCE" />
                 <action android:name="android.intent.action.MAIN" />
