@@ -1,0 +1,2 @@
+# This is supposed to decode stacktrace.  It doesn't seem to work.
+/home/dstahlke/apps/android-ndk-r8-crystax-1/toolchains/arm-linux-androideabi-4.6/prebuilt/linux-x86_64/bin/arm-linux-androideabi-addr2line -C -f -e obj/local/armeabi-v7a/librdnlib.so $1
