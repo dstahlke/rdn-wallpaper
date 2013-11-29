@@ -85,7 +85,7 @@ struct GinzburgLandau : public FunctionBase<2> {
         D(2.0F),
         alpha(0.0625F),
         beta (1.0F   ),
-        pal_gl0(new PaletteGL0()),
+        pal_gl0(new PaletteGL0(*this)),
         pal_gl1(new PaletteGL1(*this)),
         pal_gl2(new PaletteGL2(*this))
     { }
@@ -149,71 +149,61 @@ struct GinzburgLandau : public FunctionBase<2> {
     }
 
     struct PaletteGL0 : public Palette<n> {
+        PaletteGL0(GinzburgLandau &x) : parent(x) { }
+
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            if(y == 0) {
-                avg_rv = accum_rv / cnt;
-                avg_rk = accum_rk / cnt;
-                //LOGI("avg=%g,%g", avg_rv, avg_rk);
-                accum_rv = 0;
-                accum_rk = 0;
-                cnt = 0;
-            }
             vecn *gridX = G .A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
+            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
+            float rv = gridX[0].dot(gridX[0]);
             for(int x = 0; x < G.w; x++) {
-                float A = gridX[x][0];
-                float B = gridX[x][1];
-                float LA = gridL[x][0];
-                float LB = gridL[x][1];
-                float rv = A*A + B*B;
-                float rk = LA*LA + LB*LB;
-                accum_rv += rv;
-                accum_rk += rk;
-                rv /= avg_rv;
-                rk /= avg_rk;
-                float red   = (rv-rk/4) * 150;
-                float green = (rv-rk/2) * 100;
-                float blue  = green + A * 30;
+                int next_x = (x < G.w-1) ? x+1 : 0;
+                float next_rv = gridX[next_x].dot(gridX[next_x]);
+                float U = gridX[x][0];
+                float V = gridX[x][1];
+                float lU = gridL[x][0];
+                float lV = gridL[x][1];
+                //float lv = parent.D * gridL[x].dot(gridL[x]);
+                float deriv = next_rv - last_rv;
+                if(dir) deriv = -deriv;
+
+                float rotA = U*lV - V*lU;
+                float rotB = U*lU + V*lV;
+
+                float green =  70.0f - rotA * 1000.0;
+                float blue  =  70.0f - rotB * 1000.0;
+                float red   = 0; //-70.0f + rv * 200.0f;
+
+                float diffuse = 0.7 + 0.7 * deriv / sqrtf(1.0f + deriv*deriv);
+                red   *= diffuse;
+                green *= diffuse;
+                blue  *= diffuse;
 
                 pix_line[x] = to_rgb24(red, green, blue);
+                last_rv = rv;
+                rv = next_rv;
             }
-            cnt += G.w;
         }
 
-        int cnt;
-        float accum_rv, accum_rk;
-        float avg_rv, avg_rk;
+        GinzburgLandau &parent;
     };
 
     struct PaletteGL1 : public Palette<n> {
         PaletteGL1(GinzburgLandau &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            if(y == 0) {
-                avg_rv = accum_rv / cnt;
-                accum_rv = 0;
-                cnt = 0;
-            }
             vecn *gridX = G .A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
                 float rv = gridX[x].dot(gridX[x]);
                 float lv = parent.D * gridL[x].dot(gridL[x]);
-                accum_rv += rv;
-                rv /= avg_rv;
-                lv /= avg_rv;
                 float green = 0;
                 float blue  = lv * 500;
                 float red   = rv * 100 + blue;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
-            cnt += G.w;
         }
-
-        int cnt;
-        float accum_rv;
-        float avg_rv;
 
         GinzburgLandau &parent;
     };
@@ -222,23 +212,16 @@ struct GinzburgLandau : public FunctionBase<2> {
         PaletteGL2(GinzburgLandau &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            if(y == 0) {
-                avg_rv = accum_rv / cnt;
-                accum_rv = 0;
-                cnt = 0;
-            }
             vecn *gridX = G .A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
+            //vecn *gridL = LG.A + y * G.w;
             float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
             float rv = gridX[0].dot(gridX[0]);
             for(int x = 0; x < G.w; x++) {
                 int next_x = (x < G.w-1) ? x+1 : 0;
                 float next_rv = gridX[next_x].dot(gridX[next_x]);
-                float lv = parent.D * gridL[x].dot(gridL[x]);
-                accum_rv += rv;
+                //float lv = parent.D * gridL[x].dot(gridL[x]);
                 float deriv = next_rv - last_rv;
                 if(dir) deriv = -deriv;
-                //rv /= avg_rv;
                 float green = 128.0f + 200.0f * deriv;
                 float blue  = 0;
                 float red   = 0;
@@ -247,12 +230,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                 last_rv = rv;
                 rv = next_rv;
             }
-            cnt += G.w;
         }
-
-        int cnt;
-        float accum_rv;
-        float avg_rv;
 
         GinzburgLandau &parent;
     };
@@ -279,7 +257,7 @@ struct GrayScott : public FunctionBase<2> {
         D(2.0F),
         F(0.01F),
         k(0.049F),
-        pal_gs0(new PaletteGS0()),
+        pal_gs0(new PaletteGS0(*this)),
         pal_gs1(new PaletteGS1(*this)),
         pal_gs2(new PaletteGS2(*this))
     { }
@@ -343,57 +321,48 @@ struct GrayScott : public FunctionBase<2> {
     }
 
     struct PaletteGS0 : public Palette<n> {
+        PaletteGS0(GrayScott &x) : parent(x) { }
+
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
             vecn *gridX = G .A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
                 float A = gridX[x][0];
                 float B = gridX[x][1];
-                float LA = gridL[x][0];
+                float LA = parent.D * gridL[x][0];
+                //float LB = parent.D * gridL[x][1];
 
                 float red   = (1-A) * 200;
-                float green = LA * 20000;
-                float blue  = B * 1000;
+                float green = LA * 40000;
+                float blue  = B * 500;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
         }
+
+        GrayScott &parent;
     };
 
     struct PaletteGS1 : public Palette<n> {
         PaletteGS1(GrayScott &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            if(y == 0) {
-                avg_rv = accum_rv / cnt;
-                accum_rv = 0;
-                cnt = 0;
-            }
             //vecn *gridX = G .A + y * G.w;
             //vecn *gridD = DG.A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
             for(int x = 0; x < G.w; x++) {
                 //float A = gridX[x][0];
                 //float B = gridX[x][1];
-                float LA = gridL[x][0];
-                float LB = gridL[x][1];
+                float LA = parent.D * gridL[x][0];
+                float LB = parent.D * gridL[x][1];
 
-                float rv = parent.D * LB;
-                float gv = parent.D * LA;
-                if(rv > 0) accum_rv += rv;
-                //float w = sqrtf(LA*LA + LB*LB);
-                float red   = rv * 60000;
-                float green = 0; //parent.D * LB * 20000;
-                float blue  = gv * 60000;
+                float red   = LB * 60000;
+                float green = 0;
+                float blue  = LA * 60000;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
-            cnt += G.w;
         }
-
-        int cnt;
-        float accum_rv;
-        float avg_rv;
 
         GrayScott &parent;
     };
@@ -402,23 +371,16 @@ struct GrayScott : public FunctionBase<2> {
         PaletteGS2(GrayScott &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            if(y == 0) {
-                avg_rv = accum_rv / cnt;
-                accum_rv = 0;
-                cnt = 0;
-            }
             vecn *gridX = G .A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
+            //vecn *gridL = LG.A + y * G.w;
             float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
             float rv = gridX[0].dot(gridX[0]);
             for(int x = 0; x < G.w; x++) {
                 int next_x = (x < G.w-1) ? x+1 : 0;
                 float next_rv = gridX[next_x].dot(gridX[next_x]);
-                float lv = parent.D * gridL[x].dot(gridL[x]);
-                accum_rv += rv;
+                //float lv = parent.D * gridL[x].dot(gridL[x]);
                 float deriv = next_rv - last_rv;
                 if(dir) deriv = -deriv;
-                //rv /= avg_rv;
                 float green = 128.0f + 200.0f * deriv;
                 float blue  = 0;
                 float red   = 0;
@@ -427,12 +389,7 @@ struct GrayScott : public FunctionBase<2> {
                 last_rv = rv;
                 rv = next_rv;
             }
-            cnt += G.w;
         }
-
-        int cnt;
-        float accum_rv;
-        float avg_rv;
 
         GrayScott &parent;
     };
@@ -548,11 +505,6 @@ struct WackerScholl : public FunctionBase<2> {
         PaletteWS1(WackerScholl &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            if(y == 0) {
-                avg_rv = accum_rv / cnt;
-                accum_rv = 0;
-                cnt = 0;
-            }
             //vecn *gridX = G .A + y * G.w;
             //vecn *gridD = DG.A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
@@ -564,7 +516,6 @@ struct WackerScholl : public FunctionBase<2> {
 
                 float rv = parent.D * LB;
                 float gv = parent.D * LA;
-                if(rv > 0) accum_rv += rv;
                 //float w = sqrtf(LA*LA + LB*LB);
                 float red   = rv * 60000;
                 float green = 0; //parent.D * LB * 20000;
@@ -572,12 +523,7 @@ struct WackerScholl : public FunctionBase<2> {
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
-            cnt += G.w;
         }
-
-        int cnt;
-        float accum_rv;
-        float avg_rv;
 
         WackerScholl &parent;
     };
@@ -586,11 +532,6 @@ struct WackerScholl : public FunctionBase<2> {
         PaletteWS2(WackerScholl &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            if(y == 0) {
-                avg_rv = accum_rv / cnt;
-                accum_rv = 0;
-                cnt = 0;
-            }
             vecn *gridX = G .A + y * G.w;
             vecn *gridL = LG.A + y * G.w;
             float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
@@ -598,11 +539,9 @@ struct WackerScholl : public FunctionBase<2> {
             for(int x = 0; x < G.w; x++) {
                 int next_x = (x < G.w-1) ? x+1 : 0;
                 float next_rv = gridX[next_x].dot(gridX[next_x]);
-                float lv = parent.D * gridL[x].dot(gridL[x]);
-                accum_rv += rv;
+                //float lv = parent.D * gridL[x].dot(gridL[x]);
                 float deriv = next_rv - last_rv;
                 if(dir) deriv = -deriv;
-                //rv /= avg_rv;
                 float green = 128.0f + 200.0f * deriv;
                 float blue  = 0;
                 float red   = 0;
@@ -611,12 +550,7 @@ struct WackerScholl : public FunctionBase<2> {
                 last_rv = rv;
                 rv = next_rv;
             }
-            cnt += G.w;
         }
-
-        int cnt;
-        float accum_rv;
-        float avg_rv;
 
         WackerScholl &parent;
     };
