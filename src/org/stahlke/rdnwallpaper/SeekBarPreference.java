@@ -54,7 +54,7 @@ public class SeekBarPreference extends Preference {
             mTextPaint.setAntiAlias(true);
             mTextPaint.setTextSize(30);
             mTextPaint.setStrokeWidth(2);
-            setPadding(3, 3, 3, 3);
+            setPadding(0, 20, 0, 20);
         }
 
         /**
@@ -179,6 +179,8 @@ public class SeekBarPreference extends Preference {
                 // be sent even without calling this though.
                 notifyChanged();
             }
+
+            invalidate();
 
             return true;
         }
