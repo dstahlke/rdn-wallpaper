@@ -533,7 +533,7 @@ struct WackerScholl : public FunctionBase<2> {
 
         void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
             vecn *gridX = G .A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
+            //vecn *gridL = LG.A + y * G.w;
             float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
             float rv = gridX[0].dot(gridX[0]);
             for(int x = 0; x < G.w; x++) {

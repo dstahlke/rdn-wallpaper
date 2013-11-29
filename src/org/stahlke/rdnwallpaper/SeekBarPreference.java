@@ -221,7 +221,7 @@ public class SeekBarPreference extends Preference {
             canvas.drawText(text, getPaddingLeft(), getPaddingTop() - mAscent,
                     mTextPaint);
 
-            mTextPaint.setColor(0xFF00FF00);
+            mTextPaint.setColor(0xFFAAFFAA);
             mTextPaint.setStyle(Paint.Style.FILL);
             canvas.drawText(text, getPaddingLeft(), getPaddingTop() - mAscent,
                     mTextPaint);

@@ -9,15 +9,19 @@
             android:defaultValue="0"
             android:entries="@array/functions"
             android:entryValues="@array/functionsValues"
+            android:summary="Choose the reaction type"
             />
         <Preference
             android:key="reseed_button"
-            android:title="[Press to reseed]"
+            android:title="[Press to reset grid]"
+            android:summary="Use this to reset when the grid goes extinct"
             />
     </PreferenceCategory>
     <PreferenceCategory
         android:key="slider_params"
         android:title="Parameters (sliders)"
+        android:summary="Adjust these slowly.  If the grid goes extinct, press the reset button above or select one of the presets below."
+        android:layout="@layout/preference_category_summary"
         >
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_0_0"
@@ -25,7 +29,7 @@
             rdnwallpaper:min="0.1"
             rdnwallpaper:max="3.0"
             rdnwallpaper:rate="0.01"
-            rdnwallpaper:format="D: %.2f"
+            rdnwallpaper:format="Size: %.2f"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_0_1"
@@ -48,7 +52,7 @@
             rdnwallpaper:min="0.01"
             rdnwallpaper:max="1.0"
             rdnwallpaper:rate="0.0001"
-            rdnwallpaper:format="D: %.3f"
+            rdnwallpaper:format="Size: %.3f"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_1"
@@ -74,7 +78,7 @@
             rdnwallpaper:min="0.0001"
             rdnwallpaper:max="1.0"
             rdnwallpaper:rate="0.00001"
-            rdnwallpaper:format="D: %.3f"
+            rdnwallpaper:format="Size: %.3f"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_2_1"
@@ -132,9 +136,11 @@
     </PreferenceCategory>
     <PreferenceCategory
         android:title="Performance"
+        android:summary="A larger downsample will be faster but blurry.  Tiling and repeating the pattern also makes it run faster."
+        android:layout="@layout/preference_category_summary"
         >
         <ListPreference android:key="resolution"
-            android:title="Resolution"
+            android:title="Downsample"
             android:defaultValue="0"
             android:entries="@array/resolution_labels"
             android:entryValues="@array/resolution_vals"
