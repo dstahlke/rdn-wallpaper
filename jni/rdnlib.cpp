@@ -30,21 +30,23 @@ struct Grid {
     Grid(int _w, int _h) :
         w(_w), h(_h),
         wh(w*h),
-        A(new vecn[wh])
+        arr(new vecn[wh])
     { }
 
     ~Grid() {
-        delete(A);
+        delete(arr);
     }
 
     const int w, h, wh;
-    vecn *A;
+    vecn *arr;
 };
 
 template <int n>
 class Palette {
 public:
-    virtual void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) = 0;
+    virtual void render_line(uint32_t *pix_line,
+        vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+        int w, int dir, Eigen::Vector3f acc) = 0;
 
     static inline int to_rgb24(float r, float g, float b) {
         //if(r < 0) r = 0;
@@ -61,6 +63,36 @@ public:
         //accum_g += gi & 7; gi &= 0xf8; if(accum_g > 8) { gi += 8; accum_g -= 8; }
         //accum_b += bi & 7; bi &= 0xf8; if(accum_b > 8) { bi += 8; accum_b -= 8; }
         return 0xff000000 | (CLIP_BYTE(bi)<<16) | (CLIP_BYTE(gi)<<8) | CLIP_BYTE(ri);
+    }
+
+    template <typename T, typename U>
+    static inline float get_diffuse_R2(
+        const T &A,
+        const T &DX,
+        const T &DY,
+        const U &acc
+    ) {
+        Eigen::Vector3f surf;
+        surf[0] = DX.dot(A) * 2.0f;
+        surf[1] = DY.dot(A) * 2.0f;
+        surf[2] = 1;
+        surf.normalize();
+        return std::max(0.0f, surf.dot(acc));
+    }
+
+    template <typename T, typename U>
+    static inline float get_diffuse_A(
+        const T &A,
+        const T &DX,
+        const T &DY,
+        const U &acc
+    ) {
+        Eigen::Vector3f surf;
+        surf[0] = DX[0] * 2.0f;
+        surf[1] = DY[0] * 2.0f;
+        surf[2] = 1;
+        surf.normalize();
+        return std::max(0.0f, surf.dot(acc));
     }
 };
 
@@ -152,21 +184,16 @@ struct GinzburgLandau : public FunctionBase<2> {
     struct PaletteGL0 : public Palette<n> {
         PaletteGL0(GinzburgLandau &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            vecn *gridX = G .A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
-            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
-            float rv = gridX[0].dot(gridX[0]);
-            for(int x = 0; x < G.w; x++) {
-                int next_x = (x < G.w-1) ? x+1 : 0;
-                float next_rv = gridX[next_x].dot(gridX[next_x]);
-                float U = gridX[x][0];
-                float V = gridX[x][1];
-                float lU = gridL[x][0];
-                float lV = gridL[x][1];
-                //float lv = parent.D * gridL[x].dot(gridL[x]);
-                float deriv = next_rv - last_rv;
-                if(dir) deriv = -deriv;
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float U = bufA[x][0];
+                float V = bufA[x][1];
+                float lU = bufL[x][0];
+                float lV = bufL[x][1];
+                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
 
                 float rotA = U*lV - V*lU;
                 float rotB = U*lU + V*lV;
@@ -175,14 +202,11 @@ struct GinzburgLandau : public FunctionBase<2> {
                 float blue  =  70.0f - rotB * 1000.0;
                 float red   = 0; //-70.0f + rv * 200.0f;
 
-                float diffuse = 0.7 + 0.7 * deriv / sqrtf(1.0f + deriv*deriv);
                 red   *= diffuse;
                 green *= diffuse;
                 blue  *= diffuse;
 
                 pix_line[x] = to_rgb24(red, green, blue);
-                last_rv = rv;
-                rv = next_rv;
             }
         }
 
@@ -192,12 +216,13 @@ struct GinzburgLandau : public FunctionBase<2> {
     struct PaletteGL1 : public Palette<n> {
         PaletteGL1(GinzburgLandau &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            vecn *gridX = G .A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
-            for(int x = 0; x < G.w; x++) {
-                float rv = gridX[x].dot(gridX[x]);
-                float lv = parent.D * gridL[x].dot(gridL[x]);
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float rv = bufA[x].dot(bufA[x]);
+                float lv = parent.D * bufL[x].dot(bufL[x]);
                 float green = 0;
                 float blue  = lv * 500;
                 float red   = rv * 100 + blue;
@@ -212,24 +237,18 @@ struct GinzburgLandau : public FunctionBase<2> {
     struct PaletteGL2 : public Palette<n> {
         PaletteGL2(GinzburgLandau &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            vecn *gridX = G .A + y * G.w;
-            //vecn *gridL = LG.A + y * G.w;
-            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
-            float rv = gridX[0].dot(gridX[0]);
-            for(int x = 0; x < G.w; x++) {
-                int next_x = (x < G.w-1) ? x+1 : 0;
-                float next_rv = gridX[next_x].dot(gridX[next_x]);
-                //float lv = parent.D * gridL[x].dot(gridL[x]);
-                float deriv = next_rv - last_rv;
-                if(dir) deriv = -deriv;
-                float green = 128.0f + 200.0f * deriv;
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
+
+                float green = 255.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
 
                 pix_line[x] = to_rgb24(red, green, blue);
-                last_rv = rv;
-                rv = next_rv;
             }
         }
 
@@ -324,14 +343,15 @@ struct GrayScott : public FunctionBase<2> {
     struct PaletteGS0 : public Palette<n> {
         PaletteGS0(GrayScott &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            vecn *gridX = G .A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
-            for(int x = 0; x < G.w; x++) {
-                float A = gridX[x][0];
-                float B = gridX[x][1];
-                float LA = parent.D * gridL[x][0];
-                //float LB = parent.D * gridL[x][1];
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float A = bufA[x][0];
+                float B = bufA[x][1];
+                float LA = parent.D * bufL[x][0];
+                //float LB = parent.D * bufL[x][1];
 
                 float red   = (1-A) * 200;
                 float green = LA * 40000;
@@ -347,15 +367,15 @@ struct GrayScott : public FunctionBase<2> {
     struct PaletteGS1 : public Palette<n> {
         PaletteGS1(GrayScott &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            //vecn *gridX = G .A + y * G.w;
-            //vecn *gridD = DG.A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
-            for(int x = 0; x < G.w; x++) {
-                //float A = gridX[x][0];
-                //float B = gridX[x][1];
-                float LA = parent.D * gridL[x][0];
-                float LB = parent.D * gridL[x][1];
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                //float A = bufA[x][0];
+                //float B = bufA[x][1];
+                float LA = parent.D * bufL[x][0];
+                float LB = parent.D * bufL[x][1];
 
                 float red   = LB * 60000;
                 float green = 0;
@@ -371,24 +391,18 @@ struct GrayScott : public FunctionBase<2> {
     struct PaletteGS2 : public Palette<n> {
         PaletteGS2(GrayScott &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            vecn *gridX = G .A + y * G.w;
-            //vecn *gridL = LG.A + y * G.w;
-            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
-            float rv = gridX[0].dot(gridX[0]);
-            for(int x = 0; x < G.w; x++) {
-                int next_x = (x < G.w-1) ? x+1 : 0;
-                float next_rv = gridX[next_x].dot(gridX[next_x]);
-                //float lv = parent.D * gridL[x].dot(gridL[x]);
-                float deriv = next_rv - last_rv;
-                if(dir) deriv = -deriv;
-                float green = 128.0f + 200.0f * deriv;
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
+
+                float green = 255.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
 
                 pix_line[x] = to_rgb24(red, green, blue);
-                last_rv = rv;
-                rv = next_rv;
             }
         }
 
@@ -485,13 +499,14 @@ struct WackerScholl : public FunctionBase<2> {
     }
 
     struct PaletteWS0 : public Palette<n> {
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            vecn *gridX = G .A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
-            for(int x = 0; x < G.w; x++) {
-                float A = gridX[x][0];
-                float B = gridX[x][1];
-                float LA = gridL[x][0];
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float A = bufA[x][0];
+                float B = bufA[x][1];
+                float LA = bufL[x][0];
 
                 float red   = (1-A) * 200;
                 float green = LA * 20000;
@@ -505,15 +520,15 @@ struct WackerScholl : public FunctionBase<2> {
     struct PaletteWS1 : public Palette<n> {
         PaletteWS1(WackerScholl &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            //vecn *gridX = G .A + y * G.w;
-            //vecn *gridD = DG.A + y * G.w;
-            vecn *gridL = LG.A + y * G.w;
-            for(int x = 0; x < G.w; x++) {
-                //float A = gridX[x][0];
-                //float B = gridX[x][1];
-                float LA = gridL[x][0];
-                float LB = gridL[x][1];
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                //float A = bufA[x][0];
+                //float B = bufA[x][1];
+                float LA = bufL[x][0];
+                float LB = bufL[x][1];
 
                 float rv = parent.D * LB;
                 float gv = parent.D * LA;
@@ -532,24 +547,18 @@ struct WackerScholl : public FunctionBase<2> {
     struct PaletteWS2 : public Palette<n> {
         PaletteWS2(WackerScholl &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line, Grid<n> &G, Grid<n> &LG, int y, int dir) {
-            vecn *gridX = G .A + y * G.w;
-            //vecn *gridL = LG.A + y * G.w;
-            float last_rv = gridX[G.w-1].dot(gridX[G.w-1]);
-            float rv = gridX[0].dot(gridX[0]);
-            for(int x = 0; x < G.w; x++) {
-                int next_x = (x < G.w-1) ? x+1 : 0;
-                float next_rv = gridX[next_x].dot(gridX[next_x]);
-                //float lv = parent.D * gridL[x].dot(gridL[x]);
-                float deriv = next_rv - last_rv;
-                if(dir) deriv = -deriv;
-                float green = 128.0f + 200.0f * deriv;
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
+
+                float green = 255.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
 
                 pix_line[x] = to_rgb24(red, green, blue);
-                last_rv = rv;
-                rv = next_rv;
             }
         }
 
@@ -576,14 +585,16 @@ struct RdnGrids {
     RdnGrids(int _w, int _h) :
         w(_w), h(_h),
         loop_counter(0),
-        gridY(w, h),
-        gridL(w, h)
+        gridA(w, h),
+        gridL(w, h),
+        gridDX(w, h),
+        gridDY(w, h)
     { }
 
     void reset_grid(FunctionBase<n> *fn) {
         vecn bgval = fn->get_background_val();
-        for(int i = 0; i < gridY.wh; i++) {
-            gridY.A[i] = bgval;
+        for(int i = 0; i < gridA.wh; i++) {
+            gridA.arr[i] = bgval;
         }
 
         for(int seed_idx = 0; seed_idx < 20; seed_idx++) {
@@ -592,7 +603,7 @@ struct RdnGrids {
             int x0 = rand() % (w - sr);
             int y0 = rand() % (h - sr);
             for(int y = y0; y < y0+sr; y++) {
-                vecn *buf = gridY.A + y * w;
+                vecn *buf = gridA.arr + y * w;
                 for(int x = x0; x < x0+sr; x++) {
                     buf[x] = seedval;
                 }
@@ -601,22 +612,46 @@ struct RdnGrids {
     }
 
     void compute_laplacian() {
-        vecn *Ybuf = gridY.A;
-        vecn *Lbuf = gridL.A;
+        vecn *Abuf = gridA.arr;
+        vecn *Lbuf = gridL.arr;
         for(int y=0; y<h; y++) {
             int yl = y>  0 ? y-1 : h-1;
             int yr = y<h-1 ? y+1 :   0;
             vecn *L = Lbuf + y*w;
-            vecn *Y = Ybuf + y*w;
-            vecn *Yup = Ybuf + yl*w;
-            vecn *Ydn = Ybuf + yr*w;
+            vecn *A = Abuf + y*w;
+            vecn *Aup = Abuf + yl*w;
+            vecn *Adn = Abuf + yr*w;
             for(int x=0; x<w; x++) {
                 int xl = x>  0 ? x-1 : w-1;
                 int xr = x<w-1 ? x+1 :   0;
                 // Klein bottle topology
                 int x2 = y==0 ? w-1-x : x;
                 int x3 = y==h-1 ? w-1-x : x;
-                L[x] = -4.0f * Y[x] + Yup[x2] + Ydn[x3] + Y[xl] + Y[xr];
+                L[x] = -4.0f * A[x] + Aup[x2] + Adn[x3] + A[xl] + A[xr];
+            }
+        }
+    }
+
+    void compute_gradient() {
+        vecn *Abuf = gridA.arr;
+        vecn *DXbuf = gridDX.arr;
+        vecn *DYbuf = gridDY.arr;
+        for(int y=0; y<h; y++) {
+            int yl = y>  0 ? y-1 : h-1;
+            int yr = y<h-1 ? y+1 :   0;
+            vecn *A = Abuf + y*w;
+            vecn *DX = DXbuf + y*w;
+            vecn *DY = DYbuf + y*w;
+            vecn *Aup = Abuf + yl*w;
+            vecn *Adn = Abuf + yr*w;
+            for(int x=0; x<w; x++) {
+                int xl = x>  0 ? x-1 : w-1;
+                int xr = x<w-1 ? x+1 :   0;
+                // Klein bottle topology
+                int x2 = y==0 ? w-1-x : x;
+                int x3 = y==h-1 ? w-1-x : x;
+                DX[x] = A[xr] - A[xl];
+                DY[x] = Aup[x2] - Adn[x3];
             }
         }
     }
@@ -640,44 +675,57 @@ struct RdnGrids {
                 matnn m2 = m * lap_dt;
 
                 compute_laplacian();
-                vecn *Ybuf = gridY.A;
-                vecn *Lbuf = gridL.A;
-                for(int i=0; i<gridY.wh; i++) {
-                    Ybuf[i] += m2 * Lbuf[i];
+                vecn *Abuf = gridA.arr;
+                vecn *Lbuf = gridL.arr;
+                for(int i=0; i<gridA.wh; i++) {
+                    Abuf[i] += m2 * Lbuf[i];
                 }
 
                 lap_to_go -= lap_dt;
             }
 
             for(int y=0; y<h; y++) {
-                vecn *bufY = gridY.A + w*y;
-                fn->compute_dx_dt(bufY, w, dt);
+                vecn *bufA = gridA.arr + w*y;
+                fn->compute_dx_dt(bufA, w, dt);
             }
 
-            if(!std::isfinite(gridY.A[0][0])) {
+            if(!std::isfinite(gridA.arr[0][0])) {
                 reset_grid(fn);
             }
 
             //if((loop_counter) % 10 == 0) {
-            //    float v = gridY.A[0][0];
+            //    float v = gridA.arr[0][0];
             //    int c = __builtin_fpclassify(FP_NAN, FP_INFINITE, FP_NORMAL,
             //        FP_SUBNORMAL, FP_ZERO, v);
-            //    LOGI("pix=%g,%g,%d,%d", gridY.A[0][0], gridY.A[0][1], std::fpclassify(v), c);
+            //    LOGI("pix=%g,%g,%d,%d", gridA.arr[0][0], gridA.arr[0][1], std::fpclassify(v), c);
             //}
         }
     }
 
-    void draw(void *pixels, int stride, FunctionBase<n> *fn, Palette<n> *pal, int dir) {
+    void draw(
+        void *pixels, int stride, FunctionBase<n> *fn, Palette<n> *pal,
+        int dir, Eigen::Vector3f acc
+    ) {
+        // FIXME - only for dir==0?
+        compute_gradient();
+
+        int w = gridA.w;
         for(int y = 0; y < h; y++) {
             uint32_t *pix_line = (uint32_t *)((char *)pixels + y * stride);
-            pal->render_line(pix_line, gridY, gridL, y, dir);
+            vecn *bufA  = gridA .arr + y * w;
+            vecn *bufL  = gridL .arr + y * w;
+            vecn *bufDX = gridDX.arr + y * w;
+            vecn *bufDY = gridDY.arr + y * w;
+            pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, dir, acc);
         }
     }
 
     int w, h;
     int loop_counter;
-    Grid<n> gridY;
+    Grid<n> gridA;
     Grid<n> gridL;
+    Grid<n> gridDX;
+    Grid<n> gridDY;
 };
 
 RdnGrids<2> *rdn = NULL;
@@ -687,6 +735,7 @@ FunctionBase<2> *fn_ws = new WackerScholl();
 FunctionBase<2> *fn_list[] = { fn_gl, fn_gs, fn_ws };
 FunctionBase<2> *fn = fn_gl;
 Palette<2> *pal = fn->get_palette(0);
+Eigen::Vector3f last_acc;
 
 //int profile_ticks = -1;
 
@@ -694,7 +743,8 @@ extern "C" {
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
         JNIEnv *env, jobject obj);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
-        JNIEnv *env, jobject obj, jobject bitmap, jint dir);
+        JNIEnv *env, jobject obj, jobject bitmap, jint dir,
+        jfloat acc_x, jfloat acc_y, jfloat acc_z);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
         JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params, jint pal);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
@@ -704,7 +754,8 @@ extern "C" {
 };
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
-    JNIEnv *env, jobject obj, jobject bitmap, jint dir
+    JNIEnv *env, jobject obj, jobject bitmap, jint dir,
+    jfloat acc_x, jfloat acc_y, jfloat acc_z
 ) {
     int ret;
     AndroidBitmapInfo info;
@@ -727,9 +778,27 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
         delete(rdn);
         rdn = new RdnGrids<2>(info.width, info.height);
         rdn->reset_grid(fn);
+        last_acc << 0, 1, 0;
     }
 
-    rdn->draw(pixels, info.stride, fn, pal, dir);
+    Eigen::Vector3f acc;
+    acc << acc_x, acc_y, acc_z;
+    acc.normalize();
+
+    if(fabsf(acc[2]) > 0.9) {
+        acc = last_acc;
+    } else {
+        last_acc = acc;
+    }
+
+    acc[2] = 0;
+    acc.normalize();
+    acc[2] = 1;
+    acc.normalize();
+
+    if(dir) acc[0] *= -1;
+
+    rdn->draw(pixels, info.stride, fn, pal, dir, acc);
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(

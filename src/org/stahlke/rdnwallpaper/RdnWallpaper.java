@@ -15,13 +15,18 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.graphics.PixelFormat;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 
 public class RdnWallpaper extends WallpaperService {
     public static final String TAG = "rdn";
 
     // jni method
     public static native void evolve();
-    public static native void renderFrame(Bitmap bitmap, int dir);
+    public static native void renderFrame(Bitmap bitmap, int dir,
+            float acc_x, float acc_y, float acc_z);
     public static native void setParams(int fn_idx, float[] params, int pal_idx);
     public static native void setColorMatrix(float[] cm);
     public static native void resetGrid();
@@ -31,6 +36,7 @@ public class RdnWallpaper extends WallpaperService {
     }
 
     private final Handler mHandler = new Handler();
+	private OrientationReader mOrientation;
 
     static public int getDefaultRes(int w, int h) {
         return 4;
@@ -67,12 +73,15 @@ public class RdnWallpaper extends WallpaperService {
     public void onCreate() {
         Log.i(TAG, "onCreate");
         super.onCreate();
+        mOrientation = new OrientationReader();
+        mOrientation.onResume();
     }
 
     @Override
     public void onDestroy() {
         Log.i(TAG, "onDestroy");
         super.onDestroy();
+        mOrientation.onPause();
     }
 
     @Override
@@ -304,7 +313,12 @@ public class RdnWallpaper extends WallpaperService {
                     c.scale(mRes, mRes);
                     mPaint.setFilterBitmap(true);
 
-                    renderFrame(mBitmap, 0);
+                    //Log.i(TAG, "acc: "+mOrientation.mVal[0]+","+mOrientation.mVal[1]+","+mOrientation.mVal[2]);
+
+                    renderFrame(mBitmap, 0,
+                            mOrientation.mVal[0],
+                            mOrientation.mVal[1],
+                            mOrientation.mVal[2]);
                     for(int x = 0; x < mRepeatX; x++)
                     for(int y = 0; y < mRepeatY; y++) {
                         if(y % 2 == 0) {
@@ -313,7 +327,10 @@ public class RdnWallpaper extends WallpaperService {
                     }
 
                     if(mRepeatY > 1) {
-                        renderFrame(mBitmap, 1);
+                        renderFrame(mBitmap, 1,
+                                mOrientation.mVal[0],
+                                mOrientation.mVal[1],
+                                mOrientation.mVal[2]);
                     }
                     c.save();
                     Matrix m = new Matrix();
@@ -371,5 +388,37 @@ public class RdnWallpaper extends WallpaperService {
                 mHandler.post(mDrawCallback);
             }
         }
+    }
+
+    private class OrientationReader implements SensorEventListener {
+        private Sensor mSensor;
+        public float[] mVal = new float[3];
+        private float mRange;
+
+        public OrientationReader() {
+            SensorManager sm = (SensorManager)getSystemService(SENSOR_SERVICE);
+            mSensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            mRange = mSensor.getMaximumRange();
+        }
+
+        public void onResume() {
+            SensorManager sm = (SensorManager)getSystemService(SENSOR_SERVICE);
+            sm.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_GAME);
+        }
+
+        public void onPause() {
+            SensorManager sm = (SensorManager)getSystemService(SENSOR_SERVICE);
+            sm.unregisterListener(this);
+        }
+
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor == mSensor) {
+                for(int i=0; i<3; i++) {
+                    mVal[i] = event.values[i] / mRange;
+                }
+            }
+        }
+
+        public void onAccuracyChanged(Sensor sensor, int accuracy) { }
     }
 }
