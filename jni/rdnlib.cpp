@@ -134,7 +134,8 @@ struct GinzburgLandau : public FunctionBase<2> {
     }
 
     virtual float get_dt() {
-        return 0.1 / std::max(2.0f, fabsf(beta));
+        // This seems to be appropriate, but I don't know exactly why.
+        return 0.5 / std::max(5.0f, fabsf(beta*beta));
     }
 
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
@@ -574,6 +575,7 @@ template <int n>
 struct RdnGrids {
     RdnGrids(int _w, int _h) :
         w(_w), h(_h),
+        loop_counter(0),
         gridY(w, h),
         gridL(w, h)
     { }
@@ -655,6 +657,13 @@ struct RdnGrids {
             if(!std::isfinite(gridY.A[0][0])) {
                 reset_grid(fn);
             }
+
+            //if((loop_counter) % 10 == 0) {
+            //    float v = gridY.A[0][0];
+            //    int c = __builtin_fpclassify(FP_NAN, FP_INFINITE, FP_NORMAL,
+            //        FP_SUBNORMAL, FP_ZERO, v);
+            //    LOGI("pix=%g,%g,%d,%d", gridY.A[0][0], gridY.A[0][1], std::fpclassify(v), c);
+            //}
         }
     }
 
@@ -666,6 +675,7 @@ struct RdnGrids {
     }
 
     int w, h;
+    int loop_counter;
     Grid<n> gridY;
     Grid<n> gridL;
 };

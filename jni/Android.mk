@@ -5,7 +5,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE    := rdnlib
 LOCAL_SRC_FILES := rdnlib.cpp
 LOCAL_LDLIBS    := -lm -llog -ljnigraphics
-LOCAL_CFLAGS    := -ffast-math -O3 -funroll-loops -mfpu=vfpv3 -Wall
+LOCAL_CFLAGS    := -O3 -funroll-loops -mfpu=vfpv3 -Wall
 LOCAL_C_INCLUDES := eigen-android
 
 #LOCAL_C_INCLUDES += /home/dstahlke/Desktop/android-ndk-profiler
