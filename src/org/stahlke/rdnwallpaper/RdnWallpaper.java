@@ -22,6 +22,7 @@ import android.hardware.SensorManager;
 
 public class RdnWallpaper extends WallpaperService {
     public static final String TAG = "rdn";
+    public static final boolean DEBUG = false;
 
     // jni method
     public static native void evolve();
@@ -71,7 +72,7 @@ public class RdnWallpaper extends WallpaperService {
 
     @Override
     public void onCreate() {
-        Log.i(TAG, "onCreate");
+        if(DEBUG) Log.i(TAG, "onCreate");
         super.onCreate();
         mOrientation = new OrientationReader();
         mOrientation.onResume();
@@ -79,14 +80,14 @@ public class RdnWallpaper extends WallpaperService {
 
     @Override
     public void onDestroy() {
-        Log.i(TAG, "onDestroy");
+        if(DEBUG) Log.i(TAG, "onDestroy");
         super.onDestroy();
         mOrientation.onPause();
     }
 
     @Override
     public Engine onCreateEngine() {
-        Log.i(TAG, "onCreateEngine");
+        if(DEBUG) Log.i(TAG, "onCreateEngine");
         return new MyEngine();
     }
 
@@ -144,8 +145,8 @@ public class RdnWallpaper extends WallpaperService {
         }
 
         public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-            Log.i(TAG, "alpha="+prefs.getFloat("param0", 0));
-            Log.i(TAG, "function="+getFnIdx());
+            if(DEBUG) Log.i(TAG, "alpha="+prefs.getFloat("param0", 0));
+            if(DEBUG) Log.i(TAG, "function="+getFnIdx());
             setParamsToPrefs();
             // Make animation start again when prefs are edited.
             onVisibilityChanged(true);
@@ -172,10 +173,10 @@ public class RdnWallpaper extends WallpaperService {
             for(int i=0; i<p_arr.length; i++) {
                 s += ","+p_arr[i];
             }
-            Log.i(TAG, s);
+            if(DEBUG) Log.i(TAG, s);
 
             int pal = mPrefs.getInt("palette"+fn_idx, 0);
-            Log.i(TAG, "palette="+pal);
+            if(DEBUG) Log.i(TAG, "palette="+pal);
 
             setParams(fn_idx, p_arr, pal);
 
@@ -194,11 +195,11 @@ public class RdnWallpaper extends WallpaperService {
             int newRepeatY =
                 Integer.parseInt(mPrefs.getString("repeatY", "0"));
 
-            Log.i(TAG, "res,rep="+newRes+","+newRepeatX+","+newRepeatY);
+            if(DEBUG) Log.i(TAG, "res,rep="+newRes+","+newRepeatX+","+newRepeatY);
             if(newRes     == 0) newRes     = getDefaultRes    (mWidth, mHeight);
             if(newRepeatX == 0) newRepeatX = getDefaultRepeatX(mWidth, mHeight);
             if(newRepeatY == 0) newRepeatY = getDefaultRepeatY(mWidth, mHeight);
-            Log.i(TAG, "     -> "+newRes+","+newRepeatX+","+newRepeatY);
+            if(DEBUG) Log.i(TAG, "     -> "+newRes+","+newRepeatX+","+newRepeatY);
 
             if(
                 newRes != mRes ||
@@ -214,14 +215,14 @@ public class RdnWallpaper extends WallpaperService {
 
         @Override
         public void onCreate(SurfaceHolder surfaceHolder) {
-            Log.i(TAG, "MyEngine.onCreate");
+            if(DEBUG) Log.i(TAG, "MyEngine.onCreate");
             super.onCreate(surfaceHolder);
             //setTouchEventsEnabled(true);
         }
 
         @Override
         public void onDestroy() {
-            Log.i(TAG, "MyEngine.onDestroy");
+            if(DEBUG) Log.i(TAG, "MyEngine.onDestroy");
             super.onDestroy();
             mHandler.removeCallbacks(mDrawCallback);
         }
@@ -229,7 +230,7 @@ public class RdnWallpaper extends WallpaperService {
         @Override
         public void onVisibilityChanged(boolean visible) {
             if (mVisible != visible) {
-                Log.i(TAG, "MyEngine.onVisibilityChanged: "+visible);
+                if(DEBUG) Log.i(TAG, "MyEngine.onVisibilityChanged: "+visible);
                 mVisible = visible;
                 if (visible) {
                     drawFrame();
@@ -241,7 +242,7 @@ public class RdnWallpaper extends WallpaperService {
 
         @Override
         public void onSurfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            Log.i(TAG, "MyEngine.onSurfaceChanged");
+            if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceChanged");
             super.onSurfaceChanged(holder, format, width, height);
             if(height > width) {
                 mWidth = width;
@@ -262,8 +263,8 @@ public class RdnWallpaper extends WallpaperService {
         private void reshapeGrid() {
             mGridW = Math.max(4,  mWidth / mRes / mRepeatX);
             mGridH = Math.max(4, mHeight / mRes / mRepeatY);
-            Log.i(TAG, "wh="+mWidth+","+mHeight);
-            Log.i(TAG, "grid="+mGridW+","+mGridH);
+            if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
+            if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
 
             mBitmap = Bitmap.createBitmap(mGridW, mGridH, Bitmap.Config.ARGB_8888);
 
@@ -274,13 +275,13 @@ public class RdnWallpaper extends WallpaperService {
 
         @Override
         public void onSurfaceCreated(SurfaceHolder holder) {
-            Log.i(TAG, "MyEngine.onSurfaceCreated");
+            if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceCreated");
             super.onSurfaceCreated(holder);
         }
 
         @Override
         public void onSurfaceDestroyed(SurfaceHolder holder) {
-            Log.i(TAG, "MyEngine.onSurfaceDestroyed");
+            if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceDestroyed");
             super.onSurfaceDestroyed(holder);
             mVisible = false;
             mHandler.removeCallbacks(mDrawCallback);
@@ -312,8 +313,6 @@ public class RdnWallpaper extends WallpaperService {
                     c.save();
                     c.scale(mRes, mRes);
                     mPaint.setFilterBitmap(true);
-
-                    //Log.i(TAG, "acc: "+mOrientation.mVal[0]+","+mOrientation.mVal[1]+","+mOrientation.mVal[2]);
 
                     renderFrame(mBitmap, 0,
                             mOrientation.mVal[0],
@@ -365,12 +364,13 @@ public class RdnWallpaper extends WallpaperService {
                         mProfileTicks = 0;
                     }
 
-                    // FIXME
-                    c.drawText("time="+t1, 10, 80, mPaint);
-                    c.drawText("gap=" +mProfileTimes[0], 10, 100, mPaint);
-                    c.drawText("calc="+mProfileTimes[1], 10, 120, mPaint);
-                    c.drawText("rend="+mProfileTimes[2], 10, 140, mPaint);
-                    c.drawText("draw="+mProfileTimes[3], 10, 160, mPaint);
+                    if(DEBUG) {
+                        c.drawText("time="+t1, 10, 80, mPaint);
+                        c.drawText("gap=" +mProfileTimes[0], 10, 100, mPaint);
+                        c.drawText("calc="+mProfileTimes[1], 10, 120, mPaint);
+                        c.drawText("rend="+mProfileTimes[2], 10, 140, mPaint);
+                        c.drawText("draw="+mProfileTimes[3], 10, 160, mPaint);
+                    }
 
                     delay -= tf-t1;
                     if(delay < 0) delay = 0;
@@ -403,7 +403,7 @@ public class RdnWallpaper extends WallpaperService {
 
         public void onResume() {
             SensorManager sm = (SensorManager)getSystemService(SENSOR_SERVICE);
-            sm.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_GAME);
+            sm.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
 
         public void onPause() {

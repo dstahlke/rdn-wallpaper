@@ -104,7 +104,7 @@ public class SeekBarPreference extends Preference {
         @Override
         public boolean onTouchEvent(MotionEvent ev) {
             int action = ev.getActionMasked();
-            Log.i(RdnWallpaper.TAG, "touch "+action+","+ev.getX()+","+ev.getY());
+            if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "touch "+action+","+ev.getX()+","+ev.getY());
 
             // Try and prevent focus loss during drag.  For some reason, this is not enough to
             // prevent focus loss when notifyChanged() is called, so we will only do that upon
@@ -155,7 +155,7 @@ public class SeekBarPreference extends Preference {
                 float delta = ev.getX() - mLastTouchX;
                 mLastTouchX = ev.getX();
 
-                Log.i(RdnWallpaper.TAG, "step="+delta+"*"+mStepValue);
+                if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "step="+delta+"*"+mStepValue);
                 newValue += delta * mStepValue;
 
                 if(newValue > mMaxValue)
@@ -304,7 +304,7 @@ public class SeekBarPreference extends Preference {
     public void setValue(float x) {
         mCurrentValue = x;
         persistFloat(mCurrentValue);
-        Log.i(RdnWallpaper.TAG, "setValue "+mCurrentValue);
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "setValue "+mCurrentValue);
         // redraw
         if(mSeekBar != null) mSeekBar.invalidate();
     }

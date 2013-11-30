@@ -68,7 +68,7 @@ public class PresetsBox extends Preference {
     }
 
     protected void buttonClicked(int i) {
-        Log.i(TAG, "preset button clicked: "+i);
+        if(RdnWallpaper.DEBUG) Log.i(TAG, "preset button clicked: "+i);
 
         TypedArray preset_vals = mContext.getResources().obtainTypedArray(
                 mContext.getResources().getIdentifier(
@@ -76,7 +76,7 @@ public class PresetsBox extends Preference {
 
         for(int j=0; j<mSliders.size(); j++) {
             float val = preset_vals.getFloat(j, 0);
-            Log.i(TAG, "slider["+j+"]="+val);
+            if(RdnWallpaper.DEBUG) Log.i(TAG, "slider["+j+"]="+val);
             mSliders.get(j).setValue(val);
         }
 

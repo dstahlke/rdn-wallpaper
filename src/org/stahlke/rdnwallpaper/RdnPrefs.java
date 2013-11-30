@@ -39,7 +39,7 @@ public class RdnPrefs extends PreferenceActivity implements
             for(int j=0; ; j++) {
                 String pref_label = "param_"+i+"_"+j;
                 SeekBarPreference slider = (SeekBarPreference)findPreference(pref_label);
-                Log.i(RdnWallpaper.TAG, "pref "+pref_label+" = "+slider);
+                if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "pref "+pref_label+" = "+slider);
                 if(slider == null) break;
                 fn_sliders.add(slider);
             }
@@ -51,7 +51,7 @@ public class RdnPrefs extends PreferenceActivity implements
             new Preference.OnPreferenceClickListener() {
                 @Override
                 public boolean onPreferenceClick(Preference arg0) {
-                    Log.i(RdnWallpaper.TAG, "reseedPressed");
+                    if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "reseedPressed");
                     RdnWallpaper.resetGrid();
                     return true;
                 }
@@ -85,7 +85,7 @@ public class RdnPrefs extends PreferenceActivity implements
     }
 
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-        Log.i(RdnWallpaper.TAG, "RdnPrefs.onSharedPreferenceChanged");
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "RdnPrefs.onSharedPreferenceChanged");
         updateFunction(true);
 
         setListTitleToVal("function");
@@ -110,7 +110,7 @@ public class RdnPrefs extends PreferenceActivity implements
         int f_id = Integer.parseInt(prefs.getString("function", "0"));
         if(f_id == mLastFunction) return;
         mLastFunction = f_id;
-        Log.i(RdnWallpaper.TAG, "function id="+f_id);
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "function id="+f_id);
 
         PreferenceCategory sliders_box = (PreferenceCategory)findPreference("slider_params");
         sliders_box.removeAll();

@@ -79,7 +79,7 @@ public class PalettesBox extends Preference {
     }
 
     protected void buttonClicked(int i) {
-        Log.i(TAG, "palette button clicked: "+i);
+        if(RdnWallpaper.DEBUG) Log.i(TAG, "palette button clicked: "+i);
         SharedPreferences.Editor ed = mPrefs.edit();
         ed.putInt("palette"+mFnId, i);
         ed.apply();

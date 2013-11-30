@@ -149,9 +149,6 @@ struct GinzburgLandau : public FunctionBase<2> {
         D     = *(p++);
         alpha = *(p++);
         beta  = *(p++);
-        LOGE("D     = %f", D    );
-        LOGE("alpha = %f", alpha);
-        LOGE("beta  = %f", beta );
     }
 
     virtual matnn get_diffusion_matrix() {
@@ -716,8 +713,7 @@ struct RdnGrids {
         void *pixels, int stride, FunctionBase<n> *fn, Palette<n> *pal,
         int dir, Eigen::Vector3f acc
     ) {
-        // FIXME - only for dir==0?
-        compute_gradient();
+        if(dir == 0) compute_gradient();
 
         int w = gridA.w;
         for(int y = 0; y < h; y++) {
@@ -769,22 +765,23 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
 ) {
     int ret;
     AndroidBitmapInfo info;
-    if ((ret = AndroidBitmap_getInfo(env, bitmap, &info)) < 0) {
+    if((ret = AndroidBitmap_getInfo(env, bitmap, &info)) < 0) {
         LOGE("AndroidBitmap_getInfo() failed ! error=%d", ret);
         return;
     }
 
-    if (info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+    if(info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
         LOGE("Bitmap format is not RGBA_8888 !");
         return;
     }
 
     void *pixels;
-    if ((ret = AndroidBitmap_lockPixels(env, bitmap, &pixels)) < 0) {
+    if((ret = AndroidBitmap_lockPixels(env, bitmap, &pixels)) < 0) {
         LOGE("AndroidBitmap_lockPixels() failed ! error=%d", ret);
+        return;
     }
 
-    if (!rdn || rdn->w != (int)info.width || rdn->h != (int)info.height) {
+    if(!rdn || rdn->w != (int)info.width || rdn->h != (int)info.height) {
         delete(rdn);
         rdn = new RdnGrids<2>(info.width, info.height);
         rdn->reset_grid(fn);
