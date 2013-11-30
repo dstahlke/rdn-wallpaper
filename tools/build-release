@@ -1,0 +1,3 @@
+rm -rf bin gen obj libs &&
+$ANDROID_NDK_ROOT/ndk-build &&
+ant release
