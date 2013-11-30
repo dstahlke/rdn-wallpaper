@@ -357,6 +357,11 @@ struct GrayScott : public FunctionBase<2> {
                 float green = LA * 40000;
                 float blue  = B * 500;
 
+                float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
+                red   *= diffuse;
+                green *= diffuse;
+                blue  *= diffuse;
+
                 pix_line[x] = to_rgb24(red, green, blue);
             }
         }
@@ -377,9 +382,14 @@ struct GrayScott : public FunctionBase<2> {
                 float LA = parent.D * bufL[x][0];
                 float LB = parent.D * bufL[x][1];
 
-                float red   = LB * 60000;
+                float red   = LB * 100000;
                 float green = 0;
                 float blue  = LA * 60000;
+
+                float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
+                red   *= diffuse;
+                green *= diffuse;
+                blue  *= diffuse;
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
