@@ -403,7 +403,7 @@ public class RdnWallpaper extends WallpaperService {
 
         public void onResume() {
             SensorManager sm = (SensorManager)getSystemService(SENSOR_SERVICE);
-            sm.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            sm.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_GAME);
         }
 
         public void onPause() {

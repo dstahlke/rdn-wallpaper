@@ -25,6 +25,14 @@ float color_matrix[20];
 #define vecn Eigen::Matrix<float, n, 1>
 #define matnn Eigen::Matrix<float, n, n>
 
+float pow16(float x) {
+    x = x*x;
+    x = x*x;
+    x = x*x;
+    x = x*x;
+    return x;
+}
+
 template <int n>
 struct Grid {
     Grid(int _w, int _h) :
@@ -73,8 +81,8 @@ public:
         const U &acc
     ) {
         Eigen::Vector3f surf;
-        surf[0] = DX.dot(A) * 2.0f;
-        surf[1] = DY.dot(A) * 2.0f;
+        surf[0] = DX.dot(A) * 4.0f;
+        surf[1] = DY.dot(A) * 4.0f;
         surf[2] = 1;
         surf.normalize();
         return std::max(0.0f, surf.dot(acc));
@@ -88,8 +96,8 @@ public:
         const U &acc
     ) {
         Eigen::Vector3f surf;
-        surf[0] = DX[0] * 2.0f;
-        surf[1] = DY[0] * 2.0f;
+        surf[0] = DX[0] * 4.0f;
+        surf[1] = DY[0] * 4.0f;
         surf[2] = 1;
         surf.normalize();
         return std::max(0.0f, surf.dot(acc));
@@ -218,11 +226,20 @@ struct GinzburgLandau : public FunctionBase<2> {
             int w, int dir, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
+                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
                 float rv = bufA[x].dot(bufA[x]);
                 float lv = parent.D * bufL[x].dot(bufL[x]);
+
                 float green = 0;
-                float blue  = lv * 500;
-                float red   = rv * 100 + blue;
+                float blue  = lv * 500 * diffuse;
+                float red   = rv * 100 * diffuse + blue;
+
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
@@ -241,9 +258,15 @@ struct GinzburgLandau : public FunctionBase<2> {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
 
-                float green = 255.0f*diffuse;
+                float green = 25.0f + 150.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
@@ -332,7 +355,7 @@ struct GrayScott : public FunctionBase<2> {
             float a = buf[x][0];
             float b = buf[x][1];
 
-            buf[x][0] += dt * (-a*b*b + F*(1-a));
+            buf[x][0] += dt * (-a*b*b + F*(1.0f-a));
             buf[x][1] += dt * ( a*b*b - (F+k)*b);
         }
     }
@@ -347,12 +370,12 @@ struct GrayScott : public FunctionBase<2> {
             for(int x = 0; x < w; x++) {
                 float A = bufA[x][0];
                 float B = bufA[x][1];
-                float LA = parent.D * bufL[x][0];
+                //float LA = parent.D * bufL[x][0];
                 //float LB = parent.D * bufL[x][1];
 
-                float red   = (1-A) * 200;
-                float green = LA * 40000;
-                float blue  = B * 500;
+                float red   = (1.2f-A) * 150.0f;
+                float green = 0;
+                float blue  = (A*B*B - parent.F*(1.0f-A)) * 20000.0f;
 
                 float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
                 red   *= diffuse;
@@ -379,9 +402,9 @@ struct GrayScott : public FunctionBase<2> {
                 float LA = parent.D * bufL[x][0];
                 float LB = parent.D * bufL[x][1];
 
-                float red   = LB * 100000;
+                float red   = 64.0f + LB * 100000.0f;
                 float green = 0;
-                float blue  = LA * 60000;
+                float blue  = 64.0f + LA * 60000.0f;
 
                 float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
                 red   *= diffuse;
@@ -405,9 +428,15 @@ struct GrayScott : public FunctionBase<2> {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
 
-                float green = 255.0f*diffuse;
+                float green = 25.0f + 150.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
 
                 pix_line[x] = to_rgb24(red, green, blue);
             }
@@ -800,7 +829,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
 
     acc[2] = 0;
     acc.normalize();
-    acc[2] = 1;
+    acc[2] = 2;
     acc.normalize();
 
     if(dir) acc[0] *= -1;
