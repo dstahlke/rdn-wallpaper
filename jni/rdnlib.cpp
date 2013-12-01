@@ -49,6 +49,79 @@ struct Grid {
     vecn *arr;
 };
 
+struct GridsBase {
+    GridsBase(int _w, int _h) : w(_w), h(_h), wh(_w*_h) { }
+
+    virtual int get_n() = 0;
+
+    const int w, h, wh;
+};
+
+template <int n>
+struct GridsN : public GridsBase {
+    GridsN(int _w, int _h) :
+        GridsBase(_w, _h),
+        gridA(w, h),
+        gridL(w, h),
+        gridDX(w, h),
+        gridDY(w, h)
+    { }
+
+    int get_n() { return n; }
+
+    void compute_laplacian() {
+        vecn *Abuf = gridA.arr;
+        vecn *Lbuf = gridL.arr;
+        for(int y=0; y<h; y++) {
+            int yl = y>  0 ? y-1 : h-1;
+            int yr = y<h-1 ? y+1 :   0;
+            vecn *L = Lbuf + y*w;
+            vecn *A = Abuf + y*w;
+            vecn *Aup = Abuf + yl*w;
+            vecn *Adn = Abuf + yr*w;
+            for(int x=0; x<w; x++) {
+                int xl = x>  0 ? x-1 : w-1;
+                int xr = x<w-1 ? x+1 :   0;
+                // Klein bottle topology
+                int x2 = y==0 ? w-1-x : x;
+                int x3 = y==h-1 ? w-1-x : x;
+                L[x] = -4.0f * A[x] + Aup[x2] + Adn[x3] + A[xl] + A[xr];
+            }
+        }
+    }
+
+    void compute_gradient() {
+        vecn *Abuf = gridA.arr;
+        vecn *DXbuf = gridDX.arr;
+        vecn *DYbuf = gridDY.arr;
+        for(int y=0; y<h; y++) {
+            int yl = y>  0 ? y-1 : h-1;
+            int yr = y<h-1 ? y+1 :   0;
+            vecn *A = Abuf + y*w;
+            vecn *DX = DXbuf + y*w;
+            vecn *DY = DYbuf + y*w;
+            vecn *Aup = Abuf + yl*w;
+            vecn *Adn = Abuf + yr*w;
+            for(int x=0; x<w; x++) {
+                int xl = x>  0 ? x-1 : w-1;
+                int xr = x<w-1 ? x+1 :   0;
+                // Klein bottle topology
+                int x2 = y==0 ? w-1-x : x;
+                int x3 = y==h-1 ? w-1-x : x;
+                DX[x] = A[xr] - A[xl];
+                DY[x] = Aup[x2] - Adn[x3];
+            }
+        }
+    }
+
+    Grid<n> gridA;
+    Grid<n> gridL;
+    Grid<n> gridDX;
+    Grid<n> gridDY;
+};
+
+GridsBase *grids = NULL;
+
 template <int n>
 class Palette {
 public:
@@ -104,8 +177,22 @@ public:
     }
 };
 
+struct FunctionBaseBase {
+    virtual void set_params(float *p, int len) = 0;
+
+    virtual void reset_grid() = 0;
+
+    virtual void step() = 0;
+
+    virtual void draw(
+        int w, int h,
+        char *pixels, int stride, int pal_idx,
+        int dir, Eigen::Vector3f acc
+    ) = 0;
+};
+
 template <int n>
-struct FunctionBase {
+struct FunctionBase : FunctionBaseBase {
     virtual ~FunctionBase() { }
 
     virtual matnn get_diffusion_matrix() = 0;
@@ -114,8 +201,123 @@ struct FunctionBase {
     virtual void compute_dx_dt(vecn *buf, int w, float dt) = 0;
     virtual vecn get_background_val() = 0;
     virtual vecn get_seed_val(int seed_idx) = 0;
-    virtual void set_params(float *p, int len) = 0;
     virtual Palette<n> *get_palette(int id) = 0;
+
+    GridsN<n> *get_grids(int w, int h) {
+        bool realloc = !grids || grids->get_n() != n;
+        if(!realloc && w) {
+            realloc |= (grids->w != w);
+            realloc |= (grids->h != h);
+        }
+
+        if(realloc) {
+            if(!w) return NULL;
+            delete(grids);
+            GridsN<n> *gn = new GridsN<n>(w, h);
+            grids = gn;
+            reset_grid(gn);
+        }
+
+        return dynamic_cast<GridsN<n> *>(grids);
+    }
+
+    void step() {
+        GridsN<n> *grids = get_grids(0, 0);
+        if(!grids) return;
+
+        int w = grids->w;
+        int h = grids->h;
+        int wh = grids->wh;
+
+        matnn m = get_diffusion_matrix();
+        //Eigen::JacobiSVD<matnn, Eigen::NoQRPreconditioner> svd(m);
+        float diffusion_norm = get_diffusion_norm();
+        float diffusion_stability = 1.0 / (diffusion_norm * 4.0);
+        diffusion_stability *= 0.95;
+
+        float dt = get_dt();
+
+        //LOGI("dt=%g, dn=%g, ds=%g", dt, diffusion_norm, diffusion_stability);
+
+        for(int iter=0; iter<5; iter++) {
+            float lap_to_go = dt;
+            while(lap_to_go > 0) {
+                float lap_dt = lap_to_go;
+                if(lap_dt > diffusion_stability) lap_dt = diffusion_stability;
+                matnn m2 = m * lap_dt;
+
+                grids->compute_laplacian();
+                vecn *Abuf = grids->gridA.arr;
+                vecn *Lbuf = grids->gridL.arr;
+                for(int i=0; i<wh; i++) {
+                    Abuf[i] += m2 * Lbuf[i];
+                }
+
+                lap_to_go -= lap_dt;
+            }
+
+            for(int y=0; y<h; y++) {
+                vecn *bufA = grids->gridA.arr + w*y;
+                compute_dx_dt(bufA, w, dt);
+            }
+
+            if(!std::isfinite(grids->gridA.arr[0][0])) {
+                reset_grid(grids);
+            }
+        }
+    }
+
+    void reset_grid() {
+        GridsN<n> *grids = get_grids(0, 0);
+        if(!grids) return;
+        reset_grid(grids);
+    }
+
+    void reset_grid(GridsN<n> *grids) {
+        int w = grids->w;
+        int h = grids->h;
+        int wh = grids->wh;
+
+        vecn bgval = get_background_val();
+        for(int i = 0; i < wh; i++) {
+            grids->gridA.arr[i] = bgval;
+        }
+
+        for(int seed_idx = 0; seed_idx < 20; seed_idx++) {
+            int sr = 20;
+            vecn seedval = get_seed_val(seed_idx);
+            int x0 = rand() % (w - sr);
+            int y0 = rand() % (h - sr);
+            for(int y = y0; y < y0+sr; y++) {
+                vecn *buf = grids->gridA.arr + y * w;
+                for(int x = x0; x < x0+sr; x++) {
+                    buf[x] = seedval;
+                }
+            }
+        }
+    }
+
+    void draw(
+        int w, int h,
+        char *pixels, int stride, int pal_idx,
+        int dir, Eigen::Vector3f acc
+    ) {
+        GridsN<n> *grids = get_grids(w, h);
+        if(!grids) return;
+
+        if(dir == 0) grids->compute_gradient();
+
+        Palette<n> *pal = get_palette(pal_idx);
+
+        for(int y = 0; y < h; y++) {
+            uint32_t *pix_line = (uint32_t *)(pixels + y * stride);
+            vecn *bufA  = grids->gridA .arr + y * w;
+            vecn *bufL  = grids->gridL .arr + y * w;
+            vecn *bufDX = grids->gridDX.arr + y * w;
+            vecn *bufDY = grids->gridDY.arr + y * w;
+            pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, dir, acc);
+        }
+    }
 };
 
 struct GinzburgLandau : public FunctionBase<2> {
@@ -616,160 +818,13 @@ struct WackerScholl : public FunctionBase<2> {
     Palette<n> *pal_gs2;
 };
 
-template <int n>
-struct RdnGrids {
-    RdnGrids(int _w, int _h) :
-        w(_w), h(_h),
-        loop_counter(0),
-        gridA(w, h),
-        gridL(w, h),
-        gridDX(w, h),
-        gridDY(w, h)
-    { }
-
-    void reset_grid(FunctionBase<n> *fn) {
-        vecn bgval = fn->get_background_val();
-        for(int i = 0; i < gridA.wh; i++) {
-            gridA.arr[i] = bgval;
-        }
-
-        for(int seed_idx = 0; seed_idx < 20; seed_idx++) {
-            int sr = 20;
-            vecn seedval = fn->get_seed_val(seed_idx);
-            int x0 = rand() % (w - sr);
-            int y0 = rand() % (h - sr);
-            for(int y = y0; y < y0+sr; y++) {
-                vecn *buf = gridA.arr + y * w;
-                for(int x = x0; x < x0+sr; x++) {
-                    buf[x] = seedval;
-                }
-            }
-        }
-    }
-
-    void compute_laplacian() {
-        vecn *Abuf = gridA.arr;
-        vecn *Lbuf = gridL.arr;
-        for(int y=0; y<h; y++) {
-            int yl = y>  0 ? y-1 : h-1;
-            int yr = y<h-1 ? y+1 :   0;
-            vecn *L = Lbuf + y*w;
-            vecn *A = Abuf + y*w;
-            vecn *Aup = Abuf + yl*w;
-            vecn *Adn = Abuf + yr*w;
-            for(int x=0; x<w; x++) {
-                int xl = x>  0 ? x-1 : w-1;
-                int xr = x<w-1 ? x+1 :   0;
-                // Klein bottle topology
-                int x2 = y==0 ? w-1-x : x;
-                int x3 = y==h-1 ? w-1-x : x;
-                L[x] = -4.0f * A[x] + Aup[x2] + Adn[x3] + A[xl] + A[xr];
-            }
-        }
-    }
-
-    void compute_gradient() {
-        vecn *Abuf = gridA.arr;
-        vecn *DXbuf = gridDX.arr;
-        vecn *DYbuf = gridDY.arr;
-        for(int y=0; y<h; y++) {
-            int yl = y>  0 ? y-1 : h-1;
-            int yr = y<h-1 ? y+1 :   0;
-            vecn *A = Abuf + y*w;
-            vecn *DX = DXbuf + y*w;
-            vecn *DY = DYbuf + y*w;
-            vecn *Aup = Abuf + yl*w;
-            vecn *Adn = Abuf + yr*w;
-            for(int x=0; x<w; x++) {
-                int xl = x>  0 ? x-1 : w-1;
-                int xr = x<w-1 ? x+1 :   0;
-                // Klein bottle topology
-                int x2 = y==0 ? w-1-x : x;
-                int x3 = y==h-1 ? w-1-x : x;
-                DX[x] = A[xr] - A[xl];
-                DY[x] = Aup[x2] - Adn[x3];
-            }
-        }
-    }
-
-    void step(FunctionBase<n> *fn) {
-        matnn m = fn->get_diffusion_matrix();
-        //Eigen::JacobiSVD<matnn, Eigen::NoQRPreconditioner> svd(m);
-        float diffusion_norm = fn->get_diffusion_norm();
-        float diffusion_stability = 1.0 / (diffusion_norm * 4.0);
-        diffusion_stability *= 0.95;
-
-        float dt = fn->get_dt();
-
-        //LOGI("dt=%g, dn=%g, ds=%g", dt, diffusion_norm, diffusion_stability);
-
-        for(int iter=0; iter<5; iter++) {
-            float lap_to_go = dt;
-            while(lap_to_go > 0) {
-                float lap_dt = lap_to_go;
-                if(lap_dt > diffusion_stability) lap_dt = diffusion_stability;
-                matnn m2 = m * lap_dt;
-
-                compute_laplacian();
-                vecn *Abuf = gridA.arr;
-                vecn *Lbuf = gridL.arr;
-                for(int i=0; i<gridA.wh; i++) {
-                    Abuf[i] += m2 * Lbuf[i];
-                }
-
-                lap_to_go -= lap_dt;
-            }
-
-            for(int y=0; y<h; y++) {
-                vecn *bufA = gridA.arr + w*y;
-                fn->compute_dx_dt(bufA, w, dt);
-            }
-
-            if(!std::isfinite(gridA.arr[0][0])) {
-                reset_grid(fn);
-            }
-
-            //if((loop_counter) % 10 == 0) {
-            //    float v = gridA.arr[0][0];
-            //    int c = __builtin_fpclassify(FP_NAN, FP_INFINITE, FP_NORMAL,
-            //        FP_SUBNORMAL, FP_ZERO, v);
-            //    LOGI("pix=%g,%g,%d,%d", gridA.arr[0][0], gridA.arr[0][1], std::fpclassify(v), c);
-            //}
-        }
-    }
-
-    void draw(
-        void *pixels, int stride, FunctionBase<n> *fn, Palette<n> *pal,
-        int dir, Eigen::Vector3f acc
-    ) {
-        if(dir == 0) compute_gradient();
-
-        int w = gridA.w;
-        for(int y = 0; y < h; y++) {
-            uint32_t *pix_line = (uint32_t *)((char *)pixels + y * stride);
-            vecn *bufA  = gridA .arr + y * w;
-            vecn *bufL  = gridL .arr + y * w;
-            vecn *bufDX = gridDX.arr + y * w;
-            vecn *bufDY = gridDY.arr + y * w;
-            pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, dir, acc);
-        }
-    }
-
-    int w, h;
-    int loop_counter;
-    Grid<n> gridA;
-    Grid<n> gridL;
-    Grid<n> gridDX;
-    Grid<n> gridDY;
+FunctionBaseBase *fn_list[] = {
+    new GinzburgLandau(),
+    new GrayScott(),
+    new WackerScholl()
 };
-
-RdnGrids<2> *rdn = NULL;
-FunctionBase<2> *fn_gl = new GinzburgLandau();
-FunctionBase<2> *fn_gs = new GrayScott();
-FunctionBase<2> *fn_ws = new WackerScholl();
-FunctionBase<2> *fn_list[] = { fn_gl, fn_gs, fn_ws };
-FunctionBase<2> *fn = fn_gl;
-Palette<2> *pal = fn->get_palette(0);
+FunctionBaseBase *fn = fn_list[0];
+int pal_idx = 0;
 Eigen::Vector3f last_acc;
 
 //int profile_ticks = -1;
@@ -810,10 +865,8 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
         return;
     }
 
-    if(!rdn || rdn->w != (int)info.width || rdn->h != (int)info.height) {
-        delete(rdn);
-        rdn = new RdnGrids<2>(info.width, info.height);
-        rdn->reset_grid(fn);
+    // FIXME
+    if(!grids) {
         last_acc << 0, 1, 0;
     }
 
@@ -834,13 +887,13 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
 
     if(dir) acc[0] *= -1;
 
-    rdn->draw(pixels, info.stride, fn, pal, dir, acc);
+    fn->draw(info.width, info.height, (char *)pixels, info.stride, pal_idx, dir, acc);
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
     JNIEnv *env, jobject obj
 ) {
-    if(rdn) rdn->step(fn);
+    fn->step();
 
 //    if(profile_ticks == 50) {
 //        monstartup("librdnlib.so");
@@ -855,15 +908,14 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
-    JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params_in, jint pal_idx
+    JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params_in, jint _pal_idx
 ) {
     fn = fn_list[fn_idx];
-    pal = fn->get_palette(pal_idx);
+    pal_idx = _pal_idx;
     jfloat *params = env->GetFloatArrayElements(params_in, NULL);
     jsize len = env->GetArrayLength(params_in);
     fn->set_params((float *)params, len);
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
-    //rdn->reset_grid();
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
@@ -881,5 +933,5 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(
     JNIEnv *env, jobject obj
 ) {
-    rdn->reset_grid(fn);
+    fn->reset_grid();
 }
