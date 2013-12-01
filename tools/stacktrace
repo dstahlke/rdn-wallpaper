@@ -1,0 +1,4 @@
+#/home/dstahlke/apps/android-ndk-r8-crystax-1/toolchains/arm-linux-androideabi-4.6/prebuilt/linux-x86_64/bin/arm-linux-androideabi-addr2line -C -f -e obj/local/armeabi-v7a/librdnlib.so $1
+
+adb pull /data/tombstones/tombstone_$1
+$ANDROID_NDK_ROOT/ndk-stack -sym obj/local/armeabi-v7a -dump tombstone_$1
