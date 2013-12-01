@@ -1,0 +1,13 @@
+TODO:
+    good defaults
+    test fresh install
+    website
+
+To take screenshot:
+    Exit the monitor
+    adb jdwp
+    adb forward tcp:7777 jdwp:<nnn>
+    jdb -sourcepath src -attach localhost:7777
+        stop in org.stahlke.rdnwallpaper.RdnWallpaper$MyEngine.drawFrame
+    Open the monitor and take screenshot
+    Exit jdb
