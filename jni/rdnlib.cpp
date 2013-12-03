@@ -492,6 +492,153 @@ struct GinzburgLandau : public FunctionBase<2> {
     Palette<n> *pal_gl2;
 };
 
+struct GinzburgLandau3D : public FunctionBase<3> {
+    static const int n = 3;
+
+    GinzburgLandau3D() :
+        D(2.0F),
+        alpha(0.0625F),
+        beta (1.0F   ),
+        pal_gl1(new PaletteGL1(*this)),
+        pal_gl2(new PaletteGL2(*this))
+    { }
+
+    ~GinzburgLandau3D() {
+        delete(pal_gl1);
+        delete(pal_gl2);
+    }
+
+    virtual vecn get_background_val() {
+        vecn ret;
+        ret << 1, 0, 0;
+        return ret;
+    }
+
+    virtual vecn get_seed_val(int seed_idx) {
+        float U = ((seed_idx*5)%7)/7.0F*2.0F-1.0F;
+        float V = ((seed_idx*9)%13)/13.0F*2.0F-1.0F;
+        float W = ((seed_idx*11)%17)/17.0F*2.0F-1.0F;
+        vecn ret;
+        ret << U, V, W;
+        return get_background_val() + ret;
+    }
+
+    virtual void set_params(float *p, int len) {
+        if(len != 3) {
+            LOGE("params is wrong length: %d", len);
+        }
+        D     = *(p++);
+        alpha = *(p++);
+        beta  = *(p++);
+    }
+
+    virtual matnn get_diffusion_matrix() {
+        matnn ret;
+        ret << D, -D*alpha, 0,
+               D*alpha, D, 0,
+               0, 0, D;
+        return ret;
+    }
+
+    virtual float get_diffusion_norm() {
+        // This seems to be appropriate, but I don't know exactly why.
+        return D * (1 + fabsf(alpha*alpha));
+    }
+
+    virtual float get_dt() {
+        // This seems to be appropriate, but I don't know exactly why.
+        return 0.2 / std::max(5.0f, fabsf(beta*beta));
+    }
+
+    virtual void compute_dx_dt(vecn *buf, int w, float dt) {
+        for(int x=0; x<w; x++) {
+            float U = buf[x][0];
+            float V = buf[x][1];
+            float W = buf[x][2];
+            float r2 = buf[x].squaredNorm();
+
+            float theta = beta;
+
+            vecn R;
+            R[0] = U - beta*V - theta*W;
+            R[1] = V + beta*U;
+            R[2] = W + theta*U;
+
+            buf[x] += dt * (buf[x] - R*r2);
+        }
+    }
+
+    struct PaletteGL1 : public Palette<n> {
+        PaletteGL1(GinzburgLandau3D &x) : parent(x) { }
+
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
+                float rv = bufA[x].dot(bufA[x]);
+                float lv = parent.D * bufL[x].dot(bufL[x]);
+
+                float green = 0;
+                float blue  = lv * 500 * diffuse;
+                float red   = rv * 100 * diffuse + blue;
+
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
+
+                pix_line[x] = to_rgb24(red, green, blue);
+            }
+        }
+
+        GinzburgLandau3D &parent;
+    };
+
+    struct PaletteGL2 : public Palette<n> {
+        PaletteGL2(GinzburgLandau3D &x) : parent(x) { }
+
+        void render_line(uint32_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int dir, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
+
+                float green = 25.0f + 150.0f*diffuse;
+                float blue  = 0;
+                float red   = 0;
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
+
+                pix_line[x] = to_rgb24(red, green, blue);
+            }
+        }
+
+        GinzburgLandau3D &parent;
+    };
+
+    virtual Palette<n> *get_palette(int id) {
+        switch(id) {
+            case 0: return pal_gl1; // FIXME
+            case 1: return pal_gl1;
+            case 2: return pal_gl2;
+            default: return pal_gl1;
+        }
+    }
+
+    float D, alpha, beta;
+    Palette<n> *pal_gl1;
+    Palette<n> *pal_gl2;
+};
+
 struct GrayScott : public FunctionBase<2> {
     static const int n = 2;
 
@@ -821,7 +968,8 @@ struct WackerScholl : public FunctionBase<2> {
 FunctionBaseBase *fn_list[] = {
     new GinzburgLandau(),
     new GrayScott(),
-    new WackerScholl()
+    new GinzburgLandau3D()
+    //new WackerScholl()
 };
 FunctionBaseBase *fn = fn_list[0];
 int pal_idx = 0;

@@ -4,6 +4,7 @@
     <string-array name="functions">
         <item name="GL">Ginzburg-Landau</item>
         <item name="GS">Gray-Scott</item>
+        <item name="GL3D">Ginzburg-Landau 3D</item>
         <!--
         <item name="WS">Wacker-Schöll </item>
         -->
@@ -12,6 +13,7 @@
     <string-array name="functionsValues">
         <item name="GL">0</item>
         <item name="GS">1</item>
+        <item name="GL3D">2</item>
         <!--
         <item name="WS">2</item>
         -->
@@ -36,6 +38,9 @@
 
     <string-array name="presets2">
         <item>A</item>
+        <item>B</item>
+        <item>C</item>
+        <item>D</item>
     </string-array>
 
     <array name="presets0_0">
@@ -105,10 +110,26 @@
     </array>
 
     <array name="presets2_0">
-        <item>0.01</item>
-        <item>0.01</item>
-        <item>0.04</item>
-        <item>1.21</item>
+        <item>1.5</item>
+        <item>-1.6</item>
+        <item>1.1</item>
+    </array>
+
+    <array name="presets2_1">
+        <item>0.5</item>
+        <item>0.02</item>
+        <item>-1.27</item>
+    </array>
+
+    <array name="presets2_2">
+        <item>2.0</item>
+        <item>0.0</item>
+        <item>2.0</item>
+    </array>
+
+    <array name="presets2_3">
+        <item>2.0</item>
+        <item>1.2</item>
         <item>4.0</item>
     </array>
 
