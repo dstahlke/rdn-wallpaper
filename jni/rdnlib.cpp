@@ -492,8 +492,8 @@ struct GinzburgLandau : public FunctionBase<2> {
     Palette<n> *pal_gl2;
 };
 
-struct GinzburgLandau3D : public FunctionBase<3> {
-    static const int n = 3;
+struct GinzburgLandau3D : public FunctionBase<4> {
+    static const int n = 4;
 
     GinzburgLandau3D() :
         D(2.0F),
@@ -510,17 +510,28 @@ struct GinzburgLandau3D : public FunctionBase<3> {
 
     virtual vecn get_background_val() {
         vecn ret;
-        ret << 1, 0, 0;
+        ret << 1, 0, 0, 0;
         return ret;
     }
 
     virtual vecn get_seed_val(int seed_idx) {
-        float U = ((seed_idx*5)%7)/7.0F*2.0F-1.0F;
-        float V = ((seed_idx*9)%13)/13.0F*2.0F-1.0F;
-        float W = ((seed_idx*11)%17)/17.0F*2.0F-1.0F;
         vecn ret;
-        ret << U, V, W;
+        ret <<
+            ((seed_idx*5)%7)/7.0F*2.0F-1.0F,
+            ((seed_idx*9)%13)/13.0F*2.0F-1.0F,
+            ((seed_idx*11)%17)/17.0F*2.0F-1.0F,
+            ((seed_idx*9)%5)/5.0F*2.0F-1.0F;
         return get_background_val() + ret;
+    }
+
+    static inline matnn quat_to_mat(float aw, float ax, float ay, float az) {
+        matnn ret;
+        ret <<
+            aw, -ax, -ay, -az,
+            ax,  aw,  az, -ay,
+            ay, -az,  aw,  ax,
+            az,  ay, -ax,  aw;
+        return ret;
     }
 
     virtual void set_params(float *p, int len) {
@@ -530,14 +541,13 @@ struct GinzburgLandau3D : public FunctionBase<3> {
         D     = *(p++);
         alpha = *(p++);
         beta  = *(p++);
+
+        dmat = D * quat_to_mat(1.0f, alpha, 0.0f, 0.0f);
+        fmat = quat_to_mat(1.0f, 0.0f, beta, 0.0f);
     }
 
     virtual matnn get_diffusion_matrix() {
-        matnn ret;
-        ret << D, -D*alpha, 0,
-               D*alpha, D, 0,
-               0, 0, D;
-        return ret;
+        return dmat;
     }
 
     virtual float get_diffusion_norm() {
@@ -547,24 +557,24 @@ struct GinzburgLandau3D : public FunctionBase<3> {
 
     virtual float get_dt() {
         // This seems to be appropriate, but I don't know exactly why.
-        return 0.2 / std::max(5.0f, fabsf(beta*beta));
+        return 0.3 / std::max(5.0f, fabsf(beta*beta));
     }
 
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
         for(int x=0; x<w; x++) {
-            float U = buf[x][0];
-            float V = buf[x][1];
-            float W = buf[x][2];
+            //float U = buf[x][0];
+            //float V = buf[x][1];
+            //float W = buf[x][2];
             float r2 = buf[x].squaredNorm();
 
-            float theta = beta;
+            //float theta = beta;
 
-            vecn R;
-            R[0] = U - beta*V - theta*W;
-            R[1] = V + beta*U;
-            R[2] = W + theta*U;
+            //vecn R;
+            //R[0] = U - beta*V - theta*W;
+            //R[1] = V + beta*U;
+            //R[2] = W + theta*U;
 
-            buf[x] += dt * (buf[x] - R*r2);
+            buf[x] += dt * (buf[x] - r2 * (fmat * buf[x]));
         }
     }
 
@@ -635,6 +645,7 @@ struct GinzburgLandau3D : public FunctionBase<3> {
     }
 
     float D, alpha, beta;
+    matnn fmat, dmat;
     Palette<n> *pal_gl1;
     Palette<n> *pal_gl2;
 };

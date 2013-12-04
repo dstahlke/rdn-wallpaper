@@ -4,7 +4,7 @@
     <string-array name="functions">
         <item name="GL">Ginzburg-Landau</item>
         <item name="GS">Gray-Scott</item>
-        <item name="GL3D">Ginzburg-Landau 3D</item>
+        <item name="GL3D">Quaternion Ginzburg-Landau</item>
         <!--
         <item name="WS">Wacker-Schöll </item>
         -->
