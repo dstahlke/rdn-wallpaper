@@ -22,7 +22,7 @@ import android.hardware.SensorManager;
 
 public class RdnWallpaper extends WallpaperService {
     public static final String TAG = "rdn";
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = true;
 
     // jni method
     public static native void evolve();
@@ -36,8 +36,7 @@ public class RdnWallpaper extends WallpaperService {
         System.loadLibrary("rdnlib");
     }
 
-    private final Handler mHandler = new Handler();
-	private OrientationReader mOrientation;
+    public static DrawThreadHolder mDrawThreadHolder = new DrawThreadHolder();
 
     static public int getDefaultRes(int w, int h) {
         return 4;
@@ -60,12 +59,12 @@ public class RdnWallpaper extends WallpaperService {
         float lumB = 0.072f;
         float[] mat = new float[] {
             lumR + cosVal * (1 - lumR) + sinVal * (-lumR), lumG + cosVal * (-lumG) +
-                sinVal * (-lumG), lumB + cosVal * (-lumB) + sinVal * (1 - lumB), 0, 0, 
+                sinVal * (-lumG), lumB + cosVal * (-lumB) + sinVal * (1 - lumB), 0, 0,
             lumR + cosVal * (-lumR) + sinVal * (0.143f), lumG + cosVal * (1 - lumG) +
                 sinVal * (0.140f), lumB + cosVal * (-lumB) + sinVal * (-0.283f), 0, 0,
             lumR + cosVal * (-lumR) + sinVal * (-(1 - lumR)), lumG + cosVal * (-lumG) +
-                sinVal * (lumG), lumB + cosVal * (1 - lumB) + sinVal * (lumB), 0, 0, 
-                 0f, 0f, 0f, 1f, 0f, 
+                sinVal * (lumG), lumB + cosVal * (1 - lumB) + sinVal * (lumB), 0, 0,
+                 0f, 0f, 0f, 1f, 0f,
                  0f, 0f, 0f, 0f, 1f };
         cm.postConcat(new ColorMatrix(mat));
     }
@@ -74,15 +73,12 @@ public class RdnWallpaper extends WallpaperService {
     public void onCreate() {
         if(DEBUG) Log.i(TAG, "onCreate");
         super.onCreate();
-        mOrientation = new OrientationReader();
-        mOrientation.onResume();
     }
 
     @Override
     public void onDestroy() {
         if(DEBUG) Log.i(TAG, "onDestroy");
         super.onDestroy();
-        mOrientation.onPause();
     }
 
     @Override
@@ -107,17 +103,57 @@ public class RdnWallpaper extends WallpaperService {
         private int mGridH;
         private Bitmap mBitmap;
         private SharedPreferences mPrefs;
+        private Object mDrawLock = new Object();
 
         private float[] mProfileAccum = new float[4];
         private float[] mProfileTimes = new float[4];
         private int mProfileTicks = 0;
 
-        private final Runnable mDrawCallback = new Runnable() {
-            public void run() {
-                drawFrame();
+        private DrawThread mDrawThread = null;
+
+        private OrientationReader mOrientation = new OrientationReader();
+
+        class DrawThread extends Thread {
+            boolean mRunning = false;
+            boolean mAlive = true;
+            private Object mRunningLock = new Object();
+
+            DrawThread() {
+                super("RDN Draw Thread");
             }
-        };
-        private boolean mVisible;
+
+            public void run() {
+                if(DEBUG) Log.i(TAG, "mDrawThread started");
+                while(true) {
+                    synchronized(mRunningLock) {
+                        while(!mRunning && mAlive) {
+                            try {
+                                mRunningLock.wait();
+                            } catch(InterruptedException e) {
+                            }
+                        }
+                        if(!mAlive) break;
+                    }
+
+                    drawFrame();
+                }
+                if(DEBUG) Log.i(TAG, "mDrawThread exit");
+            }
+
+            public void setRunning(boolean x) {
+                synchronized(mRunningLock) {
+                    mRunning = x;
+                    mRunningLock.notify();
+                }
+            }
+
+            public void requestShutdown() {
+                synchronized(mRunningLock) {
+                    mAlive = false;
+                    mRunningLock.notify();
+                }
+            }
+        }
 
         MyEngine() {
             // Create a Paint to draw the lines for our cube
@@ -148,8 +184,6 @@ public class RdnWallpaper extends WallpaperService {
             if(DEBUG) Log.i(TAG, "alpha="+prefs.getFloat("param0", 0));
             if(DEBUG) Log.i(TAG, "function="+getFnIdx());
             setParamsToPrefs();
-            // Make animation start again when prefs are edited.
-            onVisibilityChanged(true);
         }
 
         private float[] getParamsArray() {
@@ -178,13 +212,17 @@ public class RdnWallpaper extends WallpaperService {
             int pal = mPrefs.getInt("palette"+fn_idx, 0);
             if(DEBUG) Log.i(TAG, "palette="+pal);
 
-            setParams(fn_idx, p_arr, pal);
+            synchronized(mDrawLock) {
+                setParams(fn_idx, p_arr, pal);
+            }
 
             float newHue = mPrefs.getFloat("hue", 0);
 
             ColorMatrix cm = new ColorMatrix();
             adjustHue(cm, newHue / 180f * (float)Math.PI);
-            setColorMatrix(cm.getArray());
+            synchronized(mDrawLock) {
+                setColorMatrix(cm.getArray());
+            }
 
             int newRes =
                 Integer.parseInt(mPrefs.getString("resolution", "0"));
@@ -224,19 +262,18 @@ public class RdnWallpaper extends WallpaperService {
         public void onDestroy() {
             if(DEBUG) Log.i(TAG, "MyEngine.onDestroy");
             super.onDestroy();
-            mHandler.removeCallbacks(mDrawCallback);
         }
 
         @Override
         public void onVisibilityChanged(boolean visible) {
-            if (mVisible != visible) {
-                if(DEBUG) Log.i(TAG, "MyEngine.onVisibilityChanged: "+visible);
-                mVisible = visible;
-                if (visible) {
-                    drawFrame();
-                } else {
-                    mHandler.removeCallbacks(mDrawCallback);
-                }
+            if(DEBUG) Log.i(TAG, "MyEngine.onVisibilityChanged: "+visible);
+            if(mDrawThread != null) {
+                mDrawThread.setRunning(visible);
+            }
+            if(visible) {
+                mOrientation.onResume();
+            } else {
+                mOrientation.onPause();
             }
         }
 
@@ -266,127 +303,130 @@ public class RdnWallpaper extends WallpaperService {
             if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
             if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
 
-            mBitmap = Bitmap.createBitmap(mGridW, mGridH, Bitmap.Config.ARGB_8888);
-
-            // This will call renderFrame, which will automatically reallocate
-            // the JNI buffers.
-            drawFrame();
+            synchronized(mDrawLock) {
+                mBitmap = Bitmap.createBitmap(mGridW, mGridH, Bitmap.Config.ARGB_8888);
+            }
         }
 
         @Override
         public void onSurfaceCreated(SurfaceHolder holder) {
             if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceCreated");
             super.onSurfaceCreated(holder);
+
+            mDrawThread = new DrawThread();
+            mDrawThreadHolder.add(this);
+            mDrawThread.start();
         }
 
         @Override
         public void onSurfaceDestroyed(SurfaceHolder holder) {
             if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceDestroyed");
             super.onSurfaceDestroyed(holder);
-            mVisible = false;
-            mHandler.removeCallbacks(mDrawCallback);
+            mDrawThread.requestShutdown();
+            mDrawThreadHolder.remove(this);
+        }
+
+        public void wakeup() {
+            if(DEBUG) Log.i(TAG, "MyEngine.wakeup");
+            onVisibilityChanged(true);
         }
 
         void drawFrame() {
+            // FIXME - Is a lock needed?  Can holder.lockCanvas deadlock if surface is
+            // destroyed?
             final SurfaceHolder holder = getSurfaceHolder();
-
-            long delay = mFrameInterval;
 
             Canvas c = null;
             try {
                 c = holder.lockCanvas();
-                if (c != null) {
-                    holder.setFormat(PixelFormat.RGBA_8888);
-                    c.save();
-                    if(mDoRotate) {
-                        c.rotate(-90);
-                        c.translate(-mWidth+1,0);
+                holder.setFormat(PixelFormat.RGBA_8888);
+                if(c != null) {
+                    synchronized(mDrawLock) {
+                        doDraw(c);
                     }
-
-                    long t1 = SystemClock.uptimeMillis();
-
-                    evolve();
-
-                    long t2 = SystemClock.uptimeMillis();
-
-                    long t3 = SystemClock.uptimeMillis();
-                    c.save();
-                    c.scale(mRes, mRes);
-                    mPaint.setFilterBitmap(true);
-
-                    renderFrame(mBitmap, 0,
-                            mOrientation.mVal[0],
-                            mOrientation.mVal[1],
-                            mOrientation.mVal[2]);
-                    for(int x = 0; x < mRepeatX; x++)
-                    for(int y = 0; y < mRepeatY; y++) {
-                        if(y % 2 == 0) {
-                            c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
-                        }
-                    }
-
-                    if(mRepeatY > 1) {
-                        renderFrame(mBitmap, 1,
-                                mOrientation.mVal[0],
-                                mOrientation.mVal[1],
-                                mOrientation.mVal[2]);
-                    }
-                    c.save();
-                    Matrix m = new Matrix();
-                    m.preScale(-1, 1);
-                    m.postTranslate(mGridW*mRepeatX, 0);
-                    c.concat(m);
-                    for(int x = 0; x < mRepeatX; x++)
-                    for(int y = 0; y < mRepeatY; y++) {
-                        if(y % 2 == 1) {
-                            c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
-                        }
-                    }
-                    c.restore();
-
-                    c.restore();
-
-                    long tf = SystemClock.uptimeMillis();
-                    long gap = tf - mLastDrawTime;
-                    mLastDrawTime = tf;
-
-                    mProfileAccum[0] += gap;
-                    mProfileAccum[1] += t2-t1;
-                    mProfileAccum[2] += t3-t2;
-                    mProfileAccum[3] += tf-t2;
-                    mProfileTicks++;
-
-                    if(mProfileTicks == 10) {
-                        for(int i=0; i<mProfileAccum.length; i++) {
-                            mProfileTimes[i] = mProfileAccum[i] / mProfileTicks;
-                            mProfileAccum[i] = 0;
-                        }
-                        mProfileTicks = 0;
-                    }
-
-                    if(DEBUG) {
-                        c.drawText("time="+t1, 10, 80, mPaint);
-                        c.drawText("gap=" +mProfileTimes[0], 10, 100, mPaint);
-                        c.drawText("calc="+mProfileTimes[1], 10, 120, mPaint);
-                        c.drawText("rend="+mProfileTimes[2], 10, 140, mPaint);
-                        c.drawText("draw="+mProfileTimes[3], 10, 160, mPaint);
-                    }
-
-                    delay -= tf-t1;
-                    if(delay < 0) delay = 0;
-
-                    c.restore();
                 }
             } finally {
-                if (c != null) holder.unlockCanvasAndPost(c);
+                if(c != null) holder.unlockCanvasAndPost(c);
+            }
+        }
+
+        private void doDraw(Canvas c) {
+            c.save();
+            if(mDoRotate) {
+                c.rotate(-90);
+                c.translate(-mWidth+1,0);
             }
 
-            // Reschedule the next redraw
-            mHandler.removeCallbacks(mDrawCallback);
-            if (mVisible) {
-                //mHandler.postDelayed(mDrawCallback, delay);
-                mHandler.post(mDrawCallback);
+            long t1 = SystemClock.uptimeMillis();
+
+            evolve();
+
+            long t2 = SystemClock.uptimeMillis();
+
+            long t3 = SystemClock.uptimeMillis();
+            c.save();
+            c.scale(mRes, mRes);
+            mPaint.setFilterBitmap(true);
+
+            renderFrame(mBitmap, 0,
+                    mOrientation.mVal[0],
+                    mOrientation.mVal[1],
+                    mOrientation.mVal[2]);
+            for(int x = 0; x < mRepeatX; x++)
+            for(int y = 0; y < mRepeatY; y++) {
+                if(y % 2 == 0) {
+                    c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
+                }
             }
+
+            if(mRepeatY > 1) {
+                renderFrame(mBitmap, 1,
+                        mOrientation.mVal[0],
+                        mOrientation.mVal[1],
+                        mOrientation.mVal[2]);
+            }
+            c.save();
+            Matrix m = new Matrix();
+            m.preScale(-1, 1);
+            m.postTranslate(mGridW*mRepeatX, 0);
+            c.concat(m);
+            for(int x = 0; x < mRepeatX; x++)
+            for(int y = 0; y < mRepeatY; y++) {
+                if(y % 2 == 1) {
+                    c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
+                }
+            }
+            c.restore();
+
+            c.restore();
+
+            long tf = SystemClock.uptimeMillis();
+            long gap = tf - mLastDrawTime;
+            mLastDrawTime = tf;
+
+            mProfileAccum[0] += gap;
+            mProfileAccum[1] += t2-t1;
+            mProfileAccum[2] += t3-t2;
+            mProfileAccum[3] += tf-t2;
+            mProfileTicks++;
+
+            if(mProfileTicks == 10) {
+                for(int i=0; i<mProfileAccum.length; i++) {
+                    mProfileTimes[i] = mProfileAccum[i] / mProfileTicks;
+                    mProfileAccum[i] = 0;
+                }
+                mProfileTicks = 0;
+            }
+
+            if(DEBUG) {
+                c.drawText("time="+t1, 10, 80, mPaint);
+                c.drawText("gap=" +mProfileTimes[0], 10, 100, mPaint);
+                c.drawText("calc="+mProfileTimes[1], 10, 120, mPaint);
+                c.drawText("rend="+mProfileTimes[2], 10, 140, mPaint);
+                c.drawText("draw="+mProfileTimes[3], 10, 160, mPaint);
+            }
+
+            c.restore();
         }
     }
 
@@ -412,7 +452,7 @@ public class RdnWallpaper extends WallpaperService {
         }
 
         public void onSensorChanged(SensorEvent event) {
-            if (event.sensor == mSensor) {
+            if(event.sensor == mSensor) {
                 for(int i=0; i<3; i++) {
                     mVal[i] = event.values[i] / mRange;
                 }

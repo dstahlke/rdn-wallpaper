@@ -1,1 +1,1 @@
-$ANDROID_NDK_ROOT/ndk-build && ant debug
+$ANDROID_NDK_ROOT/ndk-build APP_ABI=armeabi-v7a && ant debug

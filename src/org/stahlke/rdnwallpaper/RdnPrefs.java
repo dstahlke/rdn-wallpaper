@@ -67,12 +67,9 @@ public class RdnPrefs extends PreferenceActivity implements
         setListDefaultIfZero("repeatX", RdnWallpaper.getDefaultRepeatX(w, h));
         setListDefaultIfZero("repeatY", RdnWallpaper.getDefaultRepeatY(w, h));
 
-        // This is a hack to trigger the sending of an onSharedPreferenceChanged
-        // event, which causes RdnWallpaper to start running again (Android
+        // This is a hack to make the animation start running again (Android
         // pauses wallpapers when the settings dialog is opened).
-        SharedPreferences.Editor ed = prefs.edit();
-        ed.putBoolean("foo", !prefs.getBoolean("foo", false));
-        ed.apply();
+        RdnWallpaper.mDrawThreadHolder.wakeupLatest();
     }
 
     private void setListDefaultIfZero(String id, int val) {
