@@ -315,6 +315,7 @@ public class RdnWallpaper extends WallpaperService {
 
             mDrawThread = new DrawThread();
             mDrawThreadHolder.add(this);
+            mDrawThread.setPriority(Thread.MIN_PRIORITY);
             mDrawThread.start();
         }
 
