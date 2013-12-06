@@ -22,7 +22,7 @@ import android.hardware.SensorManager;
 
 public class RdnWallpaper extends WallpaperService {
     public static final String TAG = "rdn";
-    public static final boolean DEBUG = true;
+    public static final boolean DEBUG = BuildConfig.DEBUG;
 
     // jni method
     public static native void evolve();
