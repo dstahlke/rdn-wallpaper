@@ -19,6 +19,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class RdnWallpaper extends WallpaperService {
     public static final String TAG = "rdn";
@@ -103,7 +104,7 @@ public class RdnWallpaper extends WallpaperService {
         private int mGridH;
         private Bitmap mBitmap;
         private SharedPreferences mPrefs;
-        private Object mDrawLock = new Object();
+        private ReentrantLock mDrawLock = new ReentrantLock();
 
         private float[] mProfileAccum = new float[4];
         private float[] mProfileTimes = new float[4];
@@ -136,11 +137,7 @@ public class RdnWallpaper extends WallpaperService {
 
                     drawFrame();
 
-                    try {
-                        // Without this, nobody else can ever get mDrawLock.  This seems to fix
-                        // the problem.
-                        sleep(1);
-                    } catch(InterruptedException e) { }
+                    yield();
                 }
                 if(DEBUG) Log.i(TAG, "mDrawThread exit");
             }
@@ -217,17 +214,15 @@ public class RdnWallpaper extends WallpaperService {
             int pal = mPrefs.getInt("palette"+fn_idx, 0);
             if(DEBUG) Log.i(TAG, "palette="+pal);
 
-            synchronized(mDrawLock) {
-                setParams(fn_idx, p_arr, pal);
-            }
-
             float newHue = mPrefs.getFloat("hue", 0);
 
             ColorMatrix cm = new ColorMatrix();
             adjustHue(cm, newHue / 180f * (float)Math.PI);
-            synchronized(mDrawLock) {
+
+            mDrawLock.lock(); try {
+                setParams(fn_idx, p_arr, pal);
                 setColorMatrix(cm.getArray());
-            }
+            } finally { mDrawLock.unlock(); }
 
             int newRes =
                 Integer.parseInt(mPrefs.getString("resolution", "0"));
@@ -308,9 +303,9 @@ public class RdnWallpaper extends WallpaperService {
             if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
             if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
 
-            synchronized(mDrawLock) {
+            mDrawLock.lock(); try {
                 mBitmap = Bitmap.createBitmap(mGridW, mGridH, Bitmap.Config.ARGB_8888);
-            }
+            } finally { mDrawLock.unlock(); }
         }
 
         @Override
@@ -347,9 +342,9 @@ public class RdnWallpaper extends WallpaperService {
                 c = holder.lockCanvas();
                 holder.setFormat(PixelFormat.RGBA_8888);
                 if(c != null) {
-                    synchronized(mDrawLock) {
+                    mDrawLock.lock(); try {
                         doDraw(c);
-                    }
+                    } finally { mDrawLock.unlock(); }
                 }
             } finally {
                 if(c != null) holder.unlockCanvasAndPost(c);
