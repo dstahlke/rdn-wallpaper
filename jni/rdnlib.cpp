@@ -1049,6 +1049,8 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
     if(dir) acc[0] *= -1;
 
     fn->draw(info.width, info.height, (char *)pixels, info.stride, pal_idx, dir, acc);
+
+    AndroidBitmap_unlockPixels(env, bitmap);
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
