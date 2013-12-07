@@ -374,7 +374,8 @@ struct GinzburgLandau : public FunctionBase<2> {
 
     virtual float get_dt() {
         // This seems to be appropriate, but I don't know exactly why.
-        return 0.5 / std::max(5.0f, fabsf(beta*beta));
+        //return 0.5 / std::max(5.0f, fabsf(beta*beta));
+        return 0.1;
     }
 
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
@@ -383,8 +384,13 @@ struct GinzburgLandau : public FunctionBase<2> {
             float  V = buf[x][1];
             float r2 = U*U + V*V;
 
-            buf[x][0] += dt * (U - (U - beta*V)*r2);
-            buf[x][1] += dt * (V - (V + beta*U)*r2);
+            //buf[x][0] += dt * (U - (U - beta*V)*r2);
+            //buf[x][1] += dt * (V - (V + beta*U)*r2);
+            U += dt * U*(1.0f-r2);
+            V += dt * V*(1.0f-r2);
+            float t = dt*beta*r2;
+            buf[x][0] = U*(1.0f-t*t/2.0f) - V*t;
+            buf[x][1] = V*(1.0f-t*t/2.0f) + U*t;
         }
     }
 
@@ -492,10 +498,10 @@ struct GinzburgLandau : public FunctionBase<2> {
     Palette<n> *pal_gl2;
 };
 
-struct GinzburgLandau3D : public FunctionBase<4> {
+struct GinzburgLandauQ : public FunctionBase<4> {
     static const int n = 4;
 
-    GinzburgLandau3D() :
+    GinzburgLandauQ() :
         D(2.0F),
         alpha(0.0625F),
         beta (1.0F   ),
@@ -503,7 +509,7 @@ struct GinzburgLandau3D : public FunctionBase<4> {
         pal_gl2(new PaletteGL2(*this))
     { }
 
-    ~GinzburgLandau3D() {
+    ~GinzburgLandauQ() {
         delete(pal_gl1);
         delete(pal_gl2);
     }
@@ -541,9 +547,10 @@ struct GinzburgLandau3D : public FunctionBase<4> {
         D     = *(p++);
         alpha = *(p++);
         beta  = *(p++);
+        float theta = (float)(M_PI / 180.0) * 15.0f;
 
         dmat = D * quat_to_mat(1.0f, alpha, 0.0f, 0.0f);
-        fmat = quat_to_mat(1.0f, 0.0f, beta, 0.0f);
+        fmat = quat_to_mat(0.0f, sinf(theta), cos(theta), 0.0f);
     }
 
     virtual matnn get_diffusion_matrix() {
@@ -557,29 +564,24 @@ struct GinzburgLandau3D : public FunctionBase<4> {
 
     virtual float get_dt() {
         // This seems to be appropriate, but I don't know exactly why.
-        return 0.3 / std::max(5.0f, fabsf(beta*beta));
+        //return 0.3 / std::max(5.0f, fabsf(beta*beta));
+        return 0.05;
     }
 
     virtual void compute_dx_dt(vecn *buf, int w, float dt) {
         for(int x=0; x<w; x++) {
-            //float U = buf[x][0];
-            //float V = buf[x][1];
-            //float W = buf[x][2];
             float r2 = buf[x].squaredNorm();
 
-            //float theta = beta;
-
-            //vecn R;
-            //R[0] = U - beta*V - theta*W;
-            //R[1] = V + beta*U;
-            //R[2] = W + theta*U;
-
-            buf[x] += dt * (buf[x] - r2 * (fmat * buf[x]));
+            //fmat = quat_to_mat(0.0f, 0.0f, beta, 0.0f);
+            //buf[x] += dt * (buf[x] - r2 * (fmat * buf[x]));
+            buf[x] += dt * buf[x] * (1.0f - r2);
+            float t = dt*beta*r2;
+            buf[x] = buf[x]*(1.0f-t*t/2.0f) - fmat*buf[x]*t;
         }
     }
 
     struct PaletteGL1 : public Palette<n> {
-        PaletteGL1(GinzburgLandau3D &x) : parent(x) { }
+        PaletteGL1(GinzburgLandauQ &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
@@ -605,11 +607,11 @@ struct GinzburgLandau3D : public FunctionBase<4> {
             }
         }
 
-        GinzburgLandau3D &parent;
+        GinzburgLandauQ &parent;
     };
 
     struct PaletteGL2 : public Palette<n> {
-        PaletteGL2(GinzburgLandau3D &x) : parent(x) { }
+        PaletteGL2(GinzburgLandauQ &x) : parent(x) { }
 
         void render_line(uint32_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
@@ -632,7 +634,7 @@ struct GinzburgLandau3D : public FunctionBase<4> {
             }
         }
 
-        GinzburgLandau3D &parent;
+        GinzburgLandauQ &parent;
     };
 
     virtual Palette<n> *get_palette(int id) {
@@ -979,7 +981,7 @@ struct WackerScholl : public FunctionBase<2> {
 FunctionBaseBase *fn_list[] = {
     new GinzburgLandau(),
     new GrayScott(),
-    new GinzburgLandau3D()
+    new GinzburgLandauQ()
     //new WackerScholl()
 };
 FunctionBaseBase *fn = fn_list[0];

@@ -129,13 +129,18 @@ public class RdnWallpaper extends WallpaperService {
                         while(!mRunning && mAlive) {
                             try {
                                 mRunningLock.wait();
-                            } catch(InterruptedException e) {
-                            }
+                            } catch(InterruptedException e) { }
                         }
                         if(!mAlive) break;
                     }
 
                     drawFrame();
+
+                    try {
+                        // Without this, nobody else can ever get mDrawLock.  This seems to fix
+                        // the problem.
+                        sleep(1);
+                    } catch(InterruptedException e) { }
                 }
                 if(DEBUG) Log.i(TAG, "mDrawThread exit");
             }
