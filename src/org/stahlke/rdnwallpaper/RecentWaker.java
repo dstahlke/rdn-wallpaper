@@ -2,7 +2,7 @@ package org.stahlke.rdnwallpaper;
 
 import java.util.*;
 
-class DrawThreadHolder {
+class RecentWaker {
     private List<RdnWallpaper.MyEngine> mEngines = new ArrayList<RdnWallpaper.MyEngine>();
 
     synchronized public void add(RdnWallpaper.MyEngine t) {

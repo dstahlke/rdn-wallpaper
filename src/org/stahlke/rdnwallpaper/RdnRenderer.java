@@ -1,18 +1,20 @@
 package org.stahlke.rdnwallpaper;
 
-import android.content.SharedPreferences;
 import android.content.Context;
-import android.preference.PreferenceManager;
+import android.content.SharedPreferences;
 import android.graphics.ColorMatrix;
-import android.os.SystemClock;
-import android.service.wallpaper.WallpaperService;
-import android.util.Log;
-import android.view.MotionEvent;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.opengl.GLU;
+import android.os.SystemClock;
+import android.preference.PreferenceManager;
+import android.service.wallpaper.WallpaperService;
+import android.util.Log;
+import android.view.MotionEvent;
+import android.view.Surface;
+import android.view.WindowManager;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -45,15 +47,15 @@ class RdnRenderer implements
     private static final boolean DEBUG = RdnWallpaper.DEBUG;
     private static final int bpp = 3;
 
-    private final long mFrameInterval = 50;
+    private final long mFrameInterval = 50; // FIXME - unused
 
+    private Context mContext;
     private int mRes = 4;
     private int mRepeatX = 1;
     private int mRepeatY = 2;
     private long mLastDrawTime;
     private int mWidth;
     private int mHeight;
-    private boolean mDoRotate;
     private int mGridW;
     private int mGridH;
     private SharedPreferences mPrefs;
@@ -65,7 +67,7 @@ class RdnRenderer implements
     private float[] mProfileTimes = new float[4];
     private int mProfileTicks = 0;
 
-    private OrientationReader mOrientation;
+    private AccelerometerReader mAccelerometer;
 
     // http://stackoverflow.com/a/15119089/1048959
     private static void adjustHue(ColorMatrix cm, float value) {
@@ -87,7 +89,9 @@ class RdnRenderer implements
     }
 
     RdnRenderer(Context context) {
-        mOrientation = new OrientationReader(context);
+        mContext = context;
+
+        mAccelerometer = new AccelerometerReader(context);
 
         PreferenceManager.setDefaultValues(context,
                 R.xml.prefs, false);
@@ -105,9 +109,9 @@ class RdnRenderer implements
 
     public void onVisibilityChanged(boolean visible) {
         if(visible) {
-            mOrientation.onResume();
+            mAccelerometer.onResume();
         } else {
-            mOrientation.onPause();
+            mAccelerometer.onPause();
         }
     }
 
@@ -124,13 +128,13 @@ class RdnRenderer implements
         long t2 = SystemClock.uptimeMillis();
 
         renderFrame(mPixelBuffer, mGridW, mGridH/2, 0, 0,
-                mOrientation.mVal[0],
-                mOrientation.mVal[1],
-                mOrientation.mVal[2]);
+                mAccelerometer.mVal[0],
+                mAccelerometer.mVal[1],
+                mAccelerometer.mVal[2]);
         renderFrame(mPixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*bpp, 1,
-                mOrientation.mVal[0],
-                mOrientation.mVal[1],
-                mOrientation.mVal[2]);
+                mAccelerometer.mVal[0],
+                mAccelerometer.mVal[1],
+                mAccelerometer.mVal[2]);
 
         long t3 = SystemClock.uptimeMillis();
 
@@ -181,10 +185,9 @@ class RdnRenderer implements
 
         gl.glEnableClientState(GL10.GL_VERTEX_ARRAY);
         gl.glVertexPointer(3, GL10.GL_FLOAT, 0, vertexBuffer);
-        gl.glEnableClientState(GL10.GL_TEXTURE_COORD_ARRAY);  // Enable texture-coords-array (NEW)
-        gl.glTexCoordPointer(2, GL10.GL_FLOAT, 0, texBuffer); // Define texture-coords buffer (NEW)
+        gl.glEnableClientState(GL10.GL_TEXTURE_COORD_ARRAY);
+        gl.glTexCoordPointer(2, GL10.GL_FLOAT, 0, texBuffer);
 
-        gl.glLoadIdentity();
         gl.glDrawArrays(GL10.GL_TRIANGLE_STRIP, 0, 4);
 
         long tf = SystemClock.uptimeMillis();
@@ -229,11 +232,21 @@ class RdnRenderer implements
 
         gl.glEnable(GL11.GL_TEXTURE_2D);
 
+        gl.glViewport(0, 0, width, height);
+
         gl.glMatrixMode(GL11.GL_PROJECTION);
         gl.glLoadIdentity();
 
         gl.glMatrixMode(GL10.GL_MODELVIEW);
         gl.glLoadIdentity();
+
+        int rot_key = ((WindowManager)mContext.getSystemService(Context.WINDOW_SERVICE)).
+            getDefaultDisplay().getRotation();
+        int rot_ang =
+            (rot_key == Surface.ROTATION_90) ? 90 :
+            (rot_key == Surface.ROTATION_180) ? 180 :
+            (rot_key == Surface.ROTATION_270) ? 270 : 0;
+        gl.glRotatef(rot_ang, 0.0f, 0.0f, 1.0f);
 
         if (mTextureId != -1) {
             gl.glDeleteTextures(1, new int[] { mTextureId }, 0);
@@ -338,15 +351,12 @@ class RdnRenderer implements
     }
 
     private void rdnSetSize(int width, int height) {
-        // FIXME - screen rotate doesn't work anymore
         if(height > width) {
             mWidth = width;
             mHeight = height;
-            mDoRotate = false;
         } else {
             mWidth = height;
             mHeight = width;
-            mDoRotate = true;
         }
 
         // might need to update resolution/tiling
@@ -358,19 +368,19 @@ class RdnRenderer implements
     private void reshapeGrid() {
         mGridW = Math.max(4,  mWidth / mRes / mRepeatX);
         mGridH = Math.max(4, mHeight / mRes / mRepeatY);
-        mGridW = 128;
-        mGridH = 256; // FIXME
+        mGridW = 160;
+        mGridH = 266; // FIXME
         if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
         if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
     }
 
-    private class OrientationReader implements SensorEventListener {
+    private class AccelerometerReader implements SensorEventListener {
         private Context mContext;
         private Sensor mSensor;
         public float[] mVal = new float[3];
         private float mRange;
 
-        public OrientationReader(Context context) {
+        public AccelerometerReader(Context context) {
             mContext = context;
             SensorManager sm = (SensorManager)mContext.getSystemService(mContext.SENSOR_SERVICE);
             mSensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);

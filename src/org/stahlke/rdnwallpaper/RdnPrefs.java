@@ -69,7 +69,7 @@ public class RdnPrefs extends PreferenceActivity implements
 
         // This is a hack to make the animation start running again (Android
         // pauses wallpapers when the settings dialog is opened).
-        RdnWallpaper.mDrawThreadHolder.wakeupLatest();
+        RdnWallpaper.mRecentWaker.wakeupLatest();
     }
 
     private void setListDefaultIfZero(String id, int val) {
