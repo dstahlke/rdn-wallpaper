@@ -119,6 +119,12 @@ class RdnRenderer implements
     }
 
     public void onDrawFrame(GL10 gl10) {
+        mDrawLock.lock(); try {
+            onDrawFrame_inner(gl10);
+        } finally { mDrawLock.unlock(); }
+    }
+
+    public void onDrawFrame_inner(GL10 gl10) {
         GL11 gl = (GL11)gl10;
 
         long t1 = SystemClock.uptimeMillis();
@@ -131,21 +137,20 @@ class RdnRenderer implements
                 mAccelerometer.mVal[0],
                 mAccelerometer.mVal[1],
                 mAccelerometer.mVal[2]);
-        renderFrame(mPixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*bpp, 1,
-                mAccelerometer.mVal[0],
-                mAccelerometer.mVal[1],
-                mAccelerometer.mVal[2]);
+
+        if(mRepeatY > 1) {
+            renderFrame(mPixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*bpp, 1,
+                    mAccelerometer.mVal[0],
+                    mAccelerometer.mVal[1],
+                    mAccelerometer.mVal[2]);
+        }
 
         long t3 = SystemClock.uptimeMillis();
 
-        // Clear the surface
         gl.glClearColorx(0, 0, 0, 0);
         gl.glClear(GL11.GL_COLOR_BUFFER_BIT);
 
-        // Choose the texture
         gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
-
-        // Update the texture
         //gl.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, mGridW, mGridH,
         //                   GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
         gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
@@ -158,37 +163,46 @@ class RdnRenderer implements
         textureCrop[3] = mGridH;
         // Draw the texture on the surface
         gl.glTexParameteriv(GL10.GL_TEXTURE_2D, GL11Ext.GL_TEXTURE_CROP_RECT_OES, textureCrop, 0);
-        gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_REPEAT);
-        gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_REPEAT);
 
-        ByteBuffer vbb = ByteBuffer.allocateDirect(12 * 4);
-        vbb.order(ByteOrder.nativeOrder());
-        FloatBuffer vertexBuffer = vbb.asFloatBuffer();
-        vertexBuffer.put(new float[] {
-            -1.0f, -1.0f, 0.0f,  // 0. left-bottom-front
-             1.0f, -1.0f, 0.0f,  // 1. right-bottom-front
-            -1.0f,  1.0f, 0.0f,  // 2. left-top-front
-             1.0f,  1.0f, 0.0f   // 3. right-top-front
-        });
-        vertexBuffer.position(0);
+        //((GL11Ext) gl).glDrawTexiOES(
+        //    x*mGridW*mRes, y*mGridH*mRes, 0, mGridW*mRes-1, mGridH*mRes-1);
 
-        ByteBuffer tbb = ByteBuffer.allocateDirect(8 * 4);
-        tbb.order(ByteOrder.nativeOrder());
-        FloatBuffer texBuffer = tbb.asFloatBuffer();
-        texBuffer.put(new float[] {
-            0.0f, mRepeatY/2.0f,
-            mRepeatX, mRepeatY/2.0f,
-            0.0f, 0.0f,
-            mRepeatX, 0.0f
-        });
-        texBuffer.position(0);
+        for(int x=0; x<mRepeatX; x++)
+        for(int y=0; y<(mRepeatY+1)/2; y++) {
+            float x0 = -1.0f + 2.0f*x/mRepeatX;
+            float x1 = -1.0f + 2.0f*(x+1)/mRepeatX;
+            float y0 = -1.0f + 2.0f*y/(mRepeatY/2.0f);
+            float y1 = -1.0f + 2.0f*(y+1)/(mRepeatY/2.0f);
 
-        gl.glEnableClientState(GL10.GL_VERTEX_ARRAY);
-        gl.glVertexPointer(3, GL10.GL_FLOAT, 0, vertexBuffer);
-        gl.glEnableClientState(GL10.GL_TEXTURE_COORD_ARRAY);
-        gl.glTexCoordPointer(2, GL10.GL_FLOAT, 0, texBuffer);
+            ByteBuffer vbb = ByteBuffer.allocateDirect(12 * 4);
+            vbb.order(ByteOrder.nativeOrder());
+            FloatBuffer vertexBuffer = vbb.asFloatBuffer();
+            vertexBuffer.put(new float[] {
+                x0, y0, 0.0f,
+                x1, y0, 0.0f,
+                x0, y1, 0.0f,
+                x1, y1, 0.0f
+            });
+            vertexBuffer.position(0);
 
-        gl.glDrawArrays(GL10.GL_TRIANGLE_STRIP, 0, 4);
+            ByteBuffer tbb = ByteBuffer.allocateDirect(8 * 4);
+            tbb.order(ByteOrder.nativeOrder());
+            FloatBuffer texBuffer = tbb.asFloatBuffer();
+            texBuffer.put(new float[] {
+                0.0f, 1.0f,
+                1.0f, 1.0f,
+                0.0f, 0.0f,
+                1.0f, 0.0f
+            });
+            texBuffer.position(0);
+
+            gl.glEnableClientState(GL10.GL_VERTEX_ARRAY);
+            gl.glVertexPointer(3, GL10.GL_FLOAT, 0, vertexBuffer);
+            gl.glEnableClientState(GL10.GL_TEXTURE_COORD_ARRAY);
+            gl.glTexCoordPointer(2, GL10.GL_FLOAT, 0, texBuffer);
+
+            gl.glDrawArrays(GL10.GL_TRIANGLE_STRIP, 0, 4);
+        }
 
         long tf = SystemClock.uptimeMillis();
         long gap = tf - mLastDrawTime;
@@ -221,6 +235,12 @@ class RdnRenderer implements
     }
 
     public void onSurfaceChanged(GL10 gl10, int width, int height) {
+        mDrawLock.lock(); try {
+            onSurfaceChanged_inner(gl10, width, height);
+        } finally { mDrawLock.unlock(); }
+    }
+
+    private void onSurfaceChanged_inner(GL10 gl10, int width, int height) {
         GL11 gl = (GL11)gl10;
 
         rdnSetSize(width, height);
@@ -271,6 +291,8 @@ class RdnRenderer implements
                            GL10.GL_CLAMP_TO_EDGE);
         gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T,
                            GL10.GL_CLAMP_TO_EDGE);
+        //gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_REPEAT);
+        //gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_REPEAT);
 
         // and init the GL texture with the pixels
         gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
@@ -367,9 +389,8 @@ class RdnRenderer implements
 
     private void reshapeGrid() {
         mGridW = Math.max(4,  mWidth / mRes / mRepeatX);
-        mGridH = Math.max(4, mHeight / mRes / mRepeatY);
-        mGridW = 160;
-        mGridH = 266; // FIXME
+        mGridH = Math.max(4, mHeight / mRes / mRepeatY) * 2;
+        mGridW -= mGridW % 4;
         if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
         if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
     }
