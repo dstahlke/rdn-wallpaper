@@ -20,7 +20,7 @@ import java.nio.FloatBuffer;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
-import javax.microedition.khronos.opengles.GL11; // FIXME - needed?
+import javax.microedition.khronos.opengles.GL11;
 import javax.microedition.khronos.opengles.GL11Ext;
 
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService;
@@ -43,8 +43,10 @@ class RdnRenderer implements
 
     private static final String TAG = RdnWallpaper.TAG;
     private static final boolean DEBUG = RdnWallpaper.DEBUG;
+    private static final int bpp = 3;
 
     private final long mFrameInterval = 50;
+
     private int mRes = 4;
     private int mRepeatX = 1;
     private int mRepeatY = 2;
@@ -56,10 +58,8 @@ class RdnRenderer implements
     private int mGridH;
     private SharedPreferences mPrefs;
     private ReentrantLock mDrawLock = new ReentrantLock();
-    private Context context;
-    private ByteBuffer pixelBuffer;
-    private int bpp = 4; // FIXME
-    private int glTextureId = -1;
+    private ByteBuffer mPixelBuffer;
+    private int mTextureId = -1;
 
     private float[] mProfileAccum = new float[4];
     private float[] mProfileTimes = new float[4];
@@ -86,27 +86,29 @@ class RdnRenderer implements
         cm.postConcat(new ColorMatrix(mat));
     }
 
-    RdnRenderer(RdnWallpaper parent) {
-        // FIXME - is `parent` needed?
-        PreferenceManager.setDefaultValues(parent,
+    RdnRenderer(Context context) {
+        mOrientation = new OrientationReader(context);
+
+        PreferenceManager.setDefaultValues(context,
                 R.xml.prefs, false);
 
         mPrefs = PreferenceManager
-                .getDefaultSharedPreferences(parent);
+                .getDefaultSharedPreferences(context);
         mPrefs.registerOnSharedPreferenceChangeListener(this);
 
         setParamsToPrefs();
     }
 
-    public void setContext(Context value) {
-        context = value;
-        mOrientation = new OrientationReader(context);
+    public void release() {
         // FIXME
-        mOrientation.onResume();
     }
 
-    public void release() {
-        // TODO stuff to release
+    public void onVisibilityChanged(boolean visible) {
+        if(visible) {
+            mOrientation.onResume();
+        } else {
+            mOrientation.onPause();
+        }
     }
 
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
@@ -121,13 +123,11 @@ class RdnRenderer implements
 
         long t2 = SystemClock.uptimeMillis();
 
-        pixelBuffer.rewind();
-        renderFrame(pixelBuffer, mGridW, mGridH/2, 0, 0,
+        renderFrame(mPixelBuffer, mGridW, mGridH/2, 0, 0,
                 mOrientation.mVal[0],
                 mOrientation.mVal[1],
                 mOrientation.mVal[2]);
-        pixelBuffer.rewind(); // FIXME - needed?
-        renderFrame(pixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*3, 1,
+        renderFrame(mPixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*bpp, 1,
                 mOrientation.mVal[0],
                 mOrientation.mVal[1],
                 mOrientation.mVal[2]);
@@ -139,13 +139,13 @@ class RdnRenderer implements
         gl.glClear(GL11.GL_COLOR_BUFFER_BIT);
 
         // Choose the texture
-        gl.glBindTexture(GL11.GL_TEXTURE_2D, glTextureId);
+        gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
 
         // Update the texture
         //gl.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, mGridW, mGridH,
-        //                   GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, pixelBuffer);
+        //                   GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
         gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
-                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, pixelBuffer);
+                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
 
         int[] textureCrop = new int[4];
         textureCrop[0] = 0;
@@ -156,14 +156,6 @@ class RdnRenderer implements
         gl.glTexParameteriv(GL10.GL_TEXTURE_2D, GL11Ext.GL_TEXTURE_CROP_RECT_OES, textureCrop, 0);
         gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_REPEAT);
         gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_REPEAT);
-
-        //for(int x = 0; x < mRepeatX; x++)
-        //for(int y = 0; y < mRepeatY; y++) {
-        //    if(y % 2 == 0) {
-        //        ((GL11Ext) gl).glDrawTexiOES(
-        //            x*mGridW*mRes, y*mGridH*mRes, 0, mGridW*mRes-1, mGridH*mRes-1);
-        //    }
-        //}
 
         ByteBuffer vbb = ByteBuffer.allocateDirect(12 * 4);
         vbb.order(ByteOrder.nativeOrder());
@@ -217,13 +209,12 @@ class RdnRenderer implements
                     "gap=" +mProfileTimes[0]+
                     ", calc="+mProfileTimes[1]+
                     ", rend="+mProfileTimes[2]+
-                    ", draw="+mProfileTimes[3]);
+                    ", draw="+mProfileTimes[3]+
+                    ", obj="+this);
             }
         }
 
-        try {
-            Thread.sleep(10);
-        } catch (InterruptedException e) {}
+        Thread.yield();
     }
 
     public void onSurfaceChanged(GL10 gl10, int width, int height) {
@@ -231,7 +222,7 @@ class RdnRenderer implements
 
         rdnSetSize(width, height);
 
-        pixelBuffer = ByteBuffer.allocateDirect(mGridW*mGridH*bpp);
+        mPixelBuffer = ByteBuffer.allocateDirect(mGridW*mGridH*bpp);
 
         gl.glShadeModel(GL11.GL_FLAT);
         gl.glFrontFace(GL11.GL_CCW);
@@ -240,22 +231,20 @@ class RdnRenderer implements
 
         gl.glMatrixMode(GL11.GL_PROJECTION);
         gl.glLoadIdentity();
-        //gl.glOrthof(0.0f, width, 0.0f, height, 0.0f, 1.0f);
-        //gl.glOrthof(0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f);
 
         gl.glMatrixMode(GL10.GL_MODELVIEW);
         gl.glLoadIdentity();
 
-        if (glTextureId != -1) {
-            gl.glDeleteTextures(1, new int[] { glTextureId }, 0);
+        if (mTextureId != -1) {
+            gl.glDeleteTextures(1, new int[] { mTextureId }, 0);
         }
 
         int[] textures = new int[1];
         gl.glGenTextures(1, textures, 0);
-        glTextureId = textures[0];
+        mTextureId = textures[0];
 
         // we want to modify this texture so bind it
-        gl.glBindTexture(GL11.GL_TEXTURE_2D, glTextureId);
+        gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
 
         // GL_LINEAR gives us smoothing since the texture is larger than the screen
         gl.glTexParameterf(GL10.GL_TEXTURE_2D,
@@ -272,7 +261,7 @@ class RdnRenderer implements
 
         // and init the GL texture with the pixels
         gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
-                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, pixelBuffer);
+                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
     }
 
     private int getFnIdx() {

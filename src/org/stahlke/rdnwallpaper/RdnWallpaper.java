@@ -9,7 +9,6 @@ public class RdnWallpaper extends GLWallpaperService {
     public static final String TAG = "rdn";
     public static final boolean DEBUG = BuildConfig.DEBUG;
 
-    // FIXME
     public static DrawThreadHolder mDrawThreadHolder = new DrawThreadHolder();
 
     static public int getDefaultRes(int w, int h) {
@@ -25,18 +24,6 @@ public class RdnWallpaper extends GLWallpaperService {
     }
 
     @Override
-    public void onCreate() {
-        if(DEBUG) Log.i(TAG, "onCreate");
-        super.onCreate();
-    }
-
-    @Override
-    public void onDestroy() {
-        if(DEBUG) Log.i(TAG, "onDestroy");
-        super.onDestroy();
-    }
-
-    @Override
     public Engine onCreateEngine() {
         if(DEBUG) Log.i(TAG, "onCreateEngine");
         return new MyEngine();
@@ -47,20 +34,17 @@ public class RdnWallpaper extends GLWallpaperService {
 
         MyEngine() {
             renderer = new RdnRenderer(RdnWallpaper.this);
-            renderer.setContext(getBaseContext());
             setRenderer(renderer);
             setRenderMode(RENDERMODE_CONTINUOUSLY);
+            mDrawThreadHolder.add(this);
+            onVisibilityChanged(false); // FIXME
         }
-
-        //@Override
-        //public void onCreate(SurfaceHolder surfaceHolder) {
-        //    if(DEBUG) Log.i(TAG, "MyEngine.onCreate");
-        //    super.onCreate(surfaceHolder);
-        //}
 
         @Override
         public void onDestroy() {
             if(DEBUG) Log.i(TAG, "MyEngine.onDestroy");
+
+            mDrawThreadHolder.remove(this);
 
             if(renderer != null) {
                 renderer.release();
@@ -72,18 +56,13 @@ public class RdnWallpaper extends GLWallpaperService {
 
         @Override
         public void onVisibilityChanged(boolean visible) {
-            if(DEBUG) Log.i(TAG, "MyEngine.onVisibilityChanged: "+visible);
-//            FIXME
-//            if(visible) {
-//                mOrientation.onResume();
-//            } else {
-//                mOrientation.onPause();
-//            }
+            if(DEBUG) Log.i(TAG, "RdnWallpaper.onVisibilityChanged("+visible+") for "+this);
+            renderer.onVisibilityChanged(visible);
+            super.onVisibilityChanged(visible);
         }
 
-        // FIXME
         public void wakeup() {
-            if(DEBUG) Log.i(TAG, "MyEngine.wakeup");
+            if(DEBUG) Log.i(TAG, "RdnWallpaper.wakeup for "+this);
             onVisibilityChanged(true);
         }
     }
