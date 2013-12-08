@@ -80,7 +80,7 @@ public class PresetsBox extends Preference {
             mSliders.get(j).setValue(val);
         }
 
-        RdnWallpaper.resetGrid();
+        RdnRenderer.resetGrid();
     }
 
     @Override

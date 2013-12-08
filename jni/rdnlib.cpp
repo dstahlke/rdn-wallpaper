@@ -996,20 +996,20 @@ Eigen::Vector3f last_acc;
 //int profile_ticks = -1;
 
 extern "C" {
-    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
+    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_evolve(
         JNIEnv *env, jobject obj);
-    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
+    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_renderFrame(
         JNIEnv *env, jobject obj, jobject bitmap, jint w, jint h, jint offset, jint dir,
         jfloat acc_x, jfloat acc_y, jfloat acc_z);
-    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
+    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_setParams(
         JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params, jint pal);
-    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
+    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_setColorMatrix(
         JNIEnv *env, jobject obj, jfloatArray new_cm_arr);
-    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(
+    JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_resetGrid(
         JNIEnv *env, jobject obj);
 };
 
-JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
+JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_renderFrame(
     JNIEnv *env, jobject obj, jobject bitmap, jint w, jint h, jint offset, jint dir,
     jfloat acc_x, jfloat acc_y, jfloat acc_z
 ) {
@@ -1041,7 +1041,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
     fn->draw(w, h, pixels, w*3, pal_idx, dir, acc);
 }
 
-JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
+JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_evolve(
     JNIEnv *env, jobject obj
 ) {
     fn->step();
@@ -1058,7 +1058,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
 //    profile_ticks++;
 }
 
-JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
+JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_setParams(
     JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params_in, jint _pal_idx
 ) {
     fn = fn_list[fn_idx];
@@ -1069,7 +1069,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
     env->ReleaseFloatArrayElements(params_in, params, JNI_ABORT);
 }
 
-JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix(
+JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_setColorMatrix(
     JNIEnv *env, jobject obj, jfloatArray new_cm_arr
 ) {
     jfloat *params = env->GetFloatArrayElements(new_cm_arr, NULL);
@@ -1081,7 +1081,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setColorMatrix
     env->ReleaseFloatArrayElements(new_cm_arr, params, JNI_ABORT);
 }
 
-JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_resetGrid(
+JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_resetGrid(
     JNIEnv *env, jobject obj
 ) {
     fn->reset_grid();

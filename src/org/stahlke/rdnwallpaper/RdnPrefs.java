@@ -52,7 +52,7 @@ public class RdnPrefs extends PreferenceActivity implements
                 @Override
                 public boolean onPreferenceClick(Preference arg0) {
                     if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "reseedPressed");
-                    RdnWallpaper.resetGrid();
+                    RdnRenderer.resetGrid();
                     return true;
                 }
         });
@@ -123,7 +123,7 @@ public class RdnPrefs extends PreferenceActivity implements
         palettes_box.setFunction(f_id);
 
         if(allow_reset_grid) {
-            RdnWallpaper.resetGrid();
+            RdnRenderer.resetGrid();
         }
     }
 }
