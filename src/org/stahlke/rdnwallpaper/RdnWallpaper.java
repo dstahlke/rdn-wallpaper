@@ -1,6 +1,7 @@
 package org.stahlke.rdnwallpaper;
 
 import android.content.SharedPreferences;
+import android.content.Context;
 import android.preference.PreferenceManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -19,16 +20,27 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import java.util.concurrent.locks.ReentrantLock;
+import android.opengl.GLU;
 
-public class RdnWallpaper extends WallpaperService {
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.util.concurrent.locks.ReentrantLock;
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.opengles.GL10;
+import javax.microedition.khronos.opengles.GL11; // FIXME - needed?
+import javax.microedition.khronos.opengles.GL11Ext;
+
+import net.rbgrn.android.glwallpaperservice.GLWallpaperService;
+
+public class RdnWallpaper extends GLWallpaperService {
     public static final String TAG = "rdn";
     public static final boolean DEBUG = BuildConfig.DEBUG;
 
     // jni method
     public static native void evolve();
-    public static native void renderFrame(Bitmap bitmap, int dir,
-            float acc_x, float acc_y, float acc_z);
+    public static native void renderFrame(ByteBuffer bitmap, int w, int h, int offset,
+            int dir, float acc_x, float acc_y, float acc_z);
     public static native void setParams(int fn_idx, float[] params, int pal_idx);
     public static native void setColorMatrix(float[] cm);
     public static native void resetGrid();
@@ -88,7 +100,7 @@ public class RdnWallpaper extends WallpaperService {
         return new MyEngine();
     }
 
-    class MyEngine extends Engine implements
+    class MyEngine extends GLEngine implements
         SharedPreferences.OnSharedPreferenceChangeListener
     {
         private final long mFrameInterval = 50;
@@ -102,15 +114,14 @@ public class RdnWallpaper extends WallpaperService {
         private boolean mDoRotate;
         private int mGridW;
         private int mGridH;
-        private Bitmap mBitmap;
+        private Bitmap mBitmap; // FIXME
         private SharedPreferences mPrefs;
         private ReentrantLock mDrawLock = new ReentrantLock();
+        private MyRenderer renderer;
 
         private float[] mProfileAccum = new float[4];
         private float[] mProfileTimes = new float[4];
         private int mProfileTicks = 0;
-
-        private DrawThread mDrawThread = null;
 
         private OrientationReader mOrientation = new OrientationReader();
 
@@ -157,8 +168,192 @@ public class RdnWallpaper extends WallpaperService {
             }
         }
 
+        class MyRenderer implements GLWallpaperService.Renderer {
+            private Context context;
+            private ByteBuffer pixelBuffer;
+            private int bpp = 4; // FIXME
+            private int glTextureId = -1;
+
+            public void setContext(Context value) {
+                context = value;
+            }
+
+            public void release() {
+                // TODO stuff to release
+            }
+
+            public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+            }
+
+            public void onDrawFrame(GL10 gl10) {
+                GL11 gl = (GL11)gl10;
+
+                long t1 = SystemClock.uptimeMillis();
+
+                evolve();
+
+                long t2 = SystemClock.uptimeMillis();
+
+                pixelBuffer.rewind();
+                renderFrame(pixelBuffer, mGridW, mGridH/2, 0, 0,
+                        mOrientation.mVal[0],
+                        mOrientation.mVal[1],
+                        mOrientation.mVal[2]);
+                pixelBuffer.rewind(); // FIXME - needed?
+                renderFrame(pixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*3, 1,
+                        mOrientation.mVal[0],
+                        mOrientation.mVal[1],
+                        mOrientation.mVal[2]);
+
+                long t3 = SystemClock.uptimeMillis();
+
+                //Log.i(TAG, "bitmap="+mBitmap.getRowBytes()+","+mBitmap.getHeight()+","+pixelBuffer.remaining());
+                pixelBuffer.rewind();
+                //mBitmap.copyPixelsToBuffer(pixelBuffer);
+
+                // Clear the surface
+                gl.glClearColorx(0, 0, 0, 0);
+                gl.glClear(GL11.GL_COLOR_BUFFER_BIT);
+
+                // Choose the texture
+                gl.glBindTexture(GL11.GL_TEXTURE_2D, glTextureId);
+
+                // Update the texture
+                //gl.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, mGridW, mGridH,
+                //                   GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, pixelBuffer);
+                gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
+                        0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, pixelBuffer);
+
+                int[] textureCrop = new int[4];
+                textureCrop[0] = 0;
+                textureCrop[1] = 0;
+                textureCrop[2] = mGridW;
+                textureCrop[3] = mGridH;
+                // Draw the texture on the surface
+                gl.glTexParameteriv(GL10.GL_TEXTURE_2D, GL11Ext.GL_TEXTURE_CROP_RECT_OES, textureCrop, 0);
+                gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_REPEAT);
+                gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_REPEAT);
+
+                //for(int x = 0; x < mRepeatX; x++)
+                //for(int y = 0; y < mRepeatY; y++) {
+                //    if(y % 2 == 0) {
+                //        ((GL11Ext) gl).glDrawTexiOES(
+                //            x*mGridW*mRes, y*mGridH*mRes, 0, mGridW*mRes-1, mGridH*mRes-1);
+                //    }
+                //}
+
+                ByteBuffer vbb = ByteBuffer.allocateDirect(12 * 4);
+                vbb.order(ByteOrder.nativeOrder());
+                FloatBuffer vertexBuffer = vbb.asFloatBuffer();
+                vertexBuffer.put(new float[] {
+                    -1.0f, -1.0f, 0.0f,  // 0. left-bottom-front
+                     1.0f, -1.0f, 0.0f,  // 1. right-bottom-front
+                    -1.0f,  1.0f, 0.0f,  // 2. left-top-front
+                     1.0f,  1.0f, 0.0f   // 3. right-top-front
+                });
+                vertexBuffer.position(0);
+
+                ByteBuffer tbb = ByteBuffer.allocateDirect(8 * 4);
+                tbb.order(ByteOrder.nativeOrder());
+                FloatBuffer texBuffer = tbb.asFloatBuffer();
+                texBuffer.put(new float[] {
+                    0.0f, mRepeatY/2.0f,
+                    mRepeatX, mRepeatY/2.0f,
+                    0.0f, 0.0f,
+                    mRepeatX, 0.0f
+                });
+                texBuffer.position(0);
+
+                gl.glEnableClientState(GL10.GL_VERTEX_ARRAY);
+                gl.glVertexPointer(3, GL10.GL_FLOAT, 0, vertexBuffer);
+                gl.glEnableClientState(GL10.GL_TEXTURE_COORD_ARRAY);  // Enable texture-coords-array (NEW)
+                gl.glTexCoordPointer(2, GL10.GL_FLOAT, 0, texBuffer); // Define texture-coords buffer (NEW)
+
+                gl.glLoadIdentity();
+                gl.glDrawArrays(GL10.GL_TRIANGLE_STRIP, 0, 4);
+
+                long tf = SystemClock.uptimeMillis();
+                long gap = tf - mLastDrawTime;
+                mLastDrawTime = tf;
+
+                mProfileAccum[0] += gap;
+                mProfileAccum[1] += t2-t1;
+                mProfileAccum[2] += t3-t2;
+                mProfileAccum[3] += tf-t2;
+                mProfileTicks++;
+
+                if(mProfileTicks == 10) {
+                    for(int i=0; i<mProfileAccum.length; i++) {
+                        mProfileTimes[i] = mProfileAccum[i] / mProfileTicks;
+                        mProfileAccum[i] = 0;
+                    }
+                    mProfileTicks = 0;
+
+                    if(DEBUG) {
+                        Log.i(TAG,
+                            "gap=" +mProfileTimes[0]+
+                            ", calc="+mProfileTimes[1]+
+                            ", rend="+mProfileTimes[2]+
+                            ", draw="+mProfileTimes[3]);
+                    }
+                }
+
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {}
+            }
+
+            public void onSurfaceChanged(GL10 gl10, int width, int height) {
+                GL11 gl = (GL11)gl10;
+
+                rdnSetSize(width, height);
+
+                pixelBuffer = ByteBuffer.allocateDirect(mBitmap.getRowBytes()*mBitmap.getHeight());
+
+                gl.glShadeModel(GL11.GL_FLAT);
+                gl.glFrontFace(GL11.GL_CCW);
+
+                gl.glEnable(GL11.GL_TEXTURE_2D);
+
+                gl.glMatrixMode(GL11.GL_PROJECTION);
+                gl.glLoadIdentity();
+                //gl.glOrthof(0.0f, width, 0.0f, height, 0.0f, 1.0f);
+                //gl.glOrthof(0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f);
+
+                gl.glMatrixMode(GL10.GL_MODELVIEW);
+                gl.glLoadIdentity();
+
+                if (glTextureId != -1) {
+                    gl.glDeleteTextures(1, new int[] { glTextureId }, 0);
+                }
+
+                int[] textures = new int[1];
+                gl.glGenTextures(1, textures, 0);
+                glTextureId = textures[0];
+
+                // we want to modify this texture so bind it
+                gl.glBindTexture(GL11.GL_TEXTURE_2D, glTextureId);
+
+                // GL_LINEAR gives us smoothing since the texture is larger than the screen
+                gl.glTexParameterf(GL10.GL_TEXTURE_2D,
+                                   GL10.GL_TEXTURE_MAG_FILTER,
+                                   GL10.GL_LINEAR);
+                gl.glTexParameterf(GL10.GL_TEXTURE_2D,
+                                   GL10.GL_TEXTURE_MIN_FILTER,
+                                   GL10.GL_LINEAR);
+                // repeat the edge pixels if a surface is larger than the texture
+                gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S,
+                                   GL10.GL_CLAMP_TO_EDGE);
+                gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T,
+                                   GL10.GL_CLAMP_TO_EDGE);
+
+                // and init the GL texture with the pixels
+                gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
+                        0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, pixelBuffer);
+            }
+        }
+
         MyEngine() {
-            // Create a Paint to draw the lines for our cube
             final Paint paint = mPaint;
             paint.setColor(0xffffffff);
             paint.setAntiAlias(true);
@@ -167,6 +362,11 @@ public class RdnWallpaper extends WallpaperService {
             paint.setStyle(Paint.Style.STROKE);
             paint.setFilterBitmap(true);
             paint.setTextSize(20);
+
+            renderer = new MyRenderer();
+            renderer.setContext(getBaseContext());
+            setRenderer(renderer);
+            setRenderMode(RENDERMODE_CONTINUOUSLY);
 
             PreferenceManager.setDefaultValues(RdnWallpaper.this,
                     R.xml.prefs, false);
@@ -261,15 +461,19 @@ public class RdnWallpaper extends WallpaperService {
         @Override
         public void onDestroy() {
             if(DEBUG) Log.i(TAG, "MyEngine.onDestroy");
+
+            // Kill renderer
+            if (renderer != null) {
+                renderer.release(); // assuming yours has this method - it should!
+            }
+            renderer = null;
+
             super.onDestroy();
         }
 
         @Override
         public void onVisibilityChanged(boolean visible) {
             if(DEBUG) Log.i(TAG, "MyEngine.onVisibilityChanged: "+visible);
-            if(mDrawThread != null) {
-                mDrawThread.setRunning(visible);
-            }
             if(visible) {
                 mOrientation.onResume();
             } else {
@@ -281,6 +485,11 @@ public class RdnWallpaper extends WallpaperService {
         public void onSurfaceChanged(SurfaceHolder holder, int format, int width, int height) {
             if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceChanged");
             super.onSurfaceChanged(holder, format, width, height);
+            rdnSetSize(width, height);
+        }
+
+        private void rdnSetSize(int width, int height) {
+            // FIXME - screen rotate doesn't work anymore
             if(height > width) {
                 mWidth = width;
                 mHeight = height;
@@ -300,31 +509,14 @@ public class RdnWallpaper extends WallpaperService {
         private void reshapeGrid() {
             mGridW = Math.max(4,  mWidth / mRes / mRepeatX);
             mGridH = Math.max(4, mHeight / mRes / mRepeatY);
+            mGridW = 128;
+            mGridH = 256; // FIXME
             if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
             if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
 
             mDrawLock.lock(); try {
-                mBitmap = Bitmap.createBitmap(mGridW, mGridH, Bitmap.Config.ARGB_8888);
+                mBitmap = Bitmap.createBitmap(mGridW, mGridH*2, Bitmap.Config.ARGB_8888);
             } finally { mDrawLock.unlock(); }
-        }
-
-        @Override
-        public void onSurfaceCreated(SurfaceHolder holder) {
-            if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceCreated");
-            super.onSurfaceCreated(holder);
-
-            mDrawThread = new DrawThread();
-            mDrawThreadHolder.add(this);
-            mDrawThread.setPriority(Thread.MIN_PRIORITY);
-            mDrawThread.start();
-        }
-
-        @Override
-        public void onSurfaceDestroyed(SurfaceHolder holder) {
-            if(DEBUG) Log.i(TAG, "MyEngine.onSurfaceDestroyed");
-            super.onSurfaceDestroyed(holder);
-            mDrawThread.requestShutdown();
-            mDrawThreadHolder.remove(this);
         }
 
         public void wakeup() {
@@ -369,10 +561,10 @@ public class RdnWallpaper extends WallpaperService {
             c.scale(mRes, mRes);
             mPaint.setFilterBitmap(true);
 
-            renderFrame(mBitmap, 0,
-                    mOrientation.mVal[0],
-                    mOrientation.mVal[1],
-                    mOrientation.mVal[2]);
+            //renderFrame(mBitmap, 0,
+            //        mOrientation.mVal[0],
+            //        mOrientation.mVal[1],
+            //        mOrientation.mVal[2]);
             for(int x = 0; x < mRepeatX; x++)
             for(int y = 0; y < mRepeatY; y++) {
                 if(y % 2 == 0) {
@@ -381,10 +573,10 @@ public class RdnWallpaper extends WallpaperService {
             }
 
             if(mRepeatY > 1) {
-                renderFrame(mBitmap, 1,
-                        mOrientation.mVal[0],
-                        mOrientation.mVal[1],
-                        mOrientation.mVal[2]);
+            //    renderFrame(mBitmap, 1,
+            //            mOrientation.mVal[0],
+            //            mOrientation.mVal[1],
+            //            mOrientation.mVal[2]);
             }
             c.save();
             Matrix m = new Matrix();

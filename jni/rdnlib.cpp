@@ -125,11 +125,11 @@ GridsBase *grids = NULL;
 template <int n>
 class Palette {
 public:
-    virtual void render_line(uint32_t *pix_line,
+    virtual void render_line(uint8_t *pix_line,
         vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-        int w, int dir, Eigen::Vector3f acc) = 0;
+        int w, int stride, Eigen::Vector3f acc) = 0;
 
-    static inline int to_rgb24(float r, float g, float b) {
+    static inline void to_rgb24(uint8_t *buf, float r, float g, float b) {
         //if(r < 0) r = 0;
         //if(g < 0) g = 0;
         //if(b < 0) b = 0;
@@ -143,7 +143,10 @@ public:
         //accum_r += ri & 7; ri &= 0xf8; if(accum_r > 8) { ri += 8; accum_r -= 8; }
         //accum_g += gi & 7; gi &= 0xf8; if(accum_g > 8) { gi += 8; accum_g -= 8; }
         //accum_b += bi & 7; bi &= 0xf8; if(accum_b > 8) { bi += 8; accum_b -= 8; }
-        return 0xff000000 | (CLIP_BYTE(bi)<<16) | (CLIP_BYTE(gi)<<8) | CLIP_BYTE(ri);
+        //return 0xff000000 | (CLIP_BYTE(bi)<<16) | (CLIP_BYTE(gi)<<8) | CLIP_BYTE(ri);
+        buf[0] = CLIP_BYTE(ri);
+        buf[1] = CLIP_BYTE(gi);
+        buf[2] = CLIP_BYTE(bi);
     }
 
     template <typename T, typename U>
@@ -186,7 +189,7 @@ struct FunctionBaseBase {
 
     virtual void draw(
         int w, int h,
-        char *pixels, int stride, int pal_idx,
+        uint8_t *pixels, int stride, int pal_idx,
         int dir, Eigen::Vector3f acc
     ) = 0;
 };
@@ -299,7 +302,7 @@ struct FunctionBase : FunctionBaseBase {
 
     void draw(
         int w, int h,
-        char *pixels, int stride, int pal_idx,
+        uint8_t *pixels, int stride, int pal_idx,
         int dir, Eigen::Vector3f acc
     ) {
         GridsN<n> *grids = get_grids(w, h);
@@ -310,12 +313,14 @@ struct FunctionBase : FunctionBaseBase {
         Palette<n> *pal = get_palette(pal_idx);
 
         for(int y = 0; y < h; y++) {
-            uint32_t *pix_line = (uint32_t *)(pixels + y * stride);
+            uint8_t *pix_line = pixels + y * stride;
             vecn *bufA  = grids->gridA .arr + y * w;
             vecn *bufL  = grids->gridL .arr + y * w;
             vecn *bufDX = grids->gridDX.arr + y * w;
             vecn *bufDY = grids->gridDY.arr + y * w;
-            pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, dir, acc);
+            int stride = dir ? -3 : 3;
+            if(dir) pix_line += 3*(w-1);
+            pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, stride, acc);
         }
     }
 };
@@ -397,9 +402,9 @@ struct GinzburgLandau : public FunctionBase<2> {
     struct PaletteGL0 : public Palette<n> {
         PaletteGL0(GinzburgLandau &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float U = bufA[x][0];
@@ -419,7 +424,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                 green *= diffuse;
                 blue  *= diffuse;
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -429,9 +434,9 @@ struct GinzburgLandau : public FunctionBase<2> {
     struct PaletteGL1 : public Palette<n> {
         PaletteGL1(GinzburgLandau &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
@@ -449,7 +454,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                     blue += w;
                 }
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -459,9 +464,9 @@ struct GinzburgLandau : public FunctionBase<2> {
     struct PaletteGL2 : public Palette<n> {
         PaletteGL2(GinzburgLandau &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
@@ -476,7 +481,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                     blue += w;
                 }
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -583,9 +588,9 @@ struct GinzburgLandauQ : public FunctionBase<4> {
     struct PaletteGL1 : public Palette<n> {
         PaletteGL1(GinzburgLandauQ &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
@@ -603,7 +608,7 @@ struct GinzburgLandauQ : public FunctionBase<4> {
                     blue += w;
                 }
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -613,9 +618,9 @@ struct GinzburgLandauQ : public FunctionBase<4> {
     struct PaletteGL2 : public Palette<n> {
         PaletteGL2(GinzburgLandauQ &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
@@ -630,7 +635,7 @@ struct GinzburgLandauQ : public FunctionBase<4> {
                     blue += w;
                 }
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -725,9 +730,9 @@ struct GrayScott : public FunctionBase<2> {
     struct PaletteGS0 : public Palette<n> {
         PaletteGS0(GrayScott &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float A = bufA[x][0];
@@ -744,7 +749,7 @@ struct GrayScott : public FunctionBase<2> {
                 green *= diffuse;
                 blue  *= diffuse;
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -754,9 +759,9 @@ struct GrayScott : public FunctionBase<2> {
     struct PaletteGS1 : public Palette<n> {
         PaletteGS1(GrayScott &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 //float A = bufA[x][0];
@@ -773,7 +778,7 @@ struct GrayScott : public FunctionBase<2> {
                 green *= diffuse;
                 blue  *= diffuse;
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -783,9 +788,9 @@ struct GrayScott : public FunctionBase<2> {
     struct PaletteGS2 : public Palette<n> {
         PaletteGS2(GrayScott &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
@@ -800,7 +805,7 @@ struct GrayScott : public FunctionBase<2> {
                     blue += w;
                 }
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -897,9 +902,9 @@ struct WackerScholl : public FunctionBase<2> {
     }
 
     struct PaletteWS0 : public Palette<n> {
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float A = bufA[x][0];
@@ -910,7 +915,7 @@ struct WackerScholl : public FunctionBase<2> {
                 float green = LA * 20000;
                 float blue  = B * 1000;
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
     };
@@ -918,9 +923,9 @@ struct WackerScholl : public FunctionBase<2> {
     struct PaletteWS1 : public Palette<n> {
         PaletteWS1(WackerScholl &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 //float A = bufA[x][0];
@@ -935,7 +940,7 @@ struct WackerScholl : public FunctionBase<2> {
                 float green = 0; //parent.D * LB * 20000;
                 float blue  = gv * 60000;
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -945,9 +950,9 @@ struct WackerScholl : public FunctionBase<2> {
     struct PaletteWS2 : public Palette<n> {
         PaletteWS2(WackerScholl &x) : parent(x) { }
 
-        void render_line(uint32_t *pix_line,
+        void render_line(uint8_t *pix_line,
             vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int dir, Eigen::Vector3f acc
+            int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
@@ -956,7 +961,7 @@ struct WackerScholl : public FunctionBase<2> {
                 float blue  = 0;
                 float red   = 0;
 
-                pix_line[x] = to_rgb24(red, green, blue);
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
 
@@ -994,7 +999,7 @@ extern "C" {
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
         JNIEnv *env, jobject obj);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
-        JNIEnv *env, jobject obj, jobject bitmap, jint dir,
+        JNIEnv *env, jobject obj, jobject bitmap, jint w, jint h, jint offset, jint dir,
         jfloat acc_x, jfloat acc_y, jfloat acc_z);
     JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_setParams(
         JNIEnv *env, jobject obj, jint fn_idx, jfloatArray params, jint pal);
@@ -1005,26 +1010,11 @@ extern "C" {
 };
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
-    JNIEnv *env, jobject obj, jobject bitmap, jint dir,
+    JNIEnv *env, jobject obj, jobject bitmap, jint w, jint h, jint offset, jint dir,
     jfloat acc_x, jfloat acc_y, jfloat acc_z
 ) {
-    int ret;
-    AndroidBitmapInfo info;
-    if((ret = AndroidBitmap_getInfo(env, bitmap, &info)) < 0) {
-        LOGE("AndroidBitmap_getInfo() failed ! error=%d", ret);
-        return;
-    }
-
-    if(info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
-        LOGE("Bitmap format is not RGBA_8888 !");
-        return;
-    }
-
-    void *pixels;
-    if((ret = AndroidBitmap_lockPixels(env, bitmap, &pixels)) < 0) {
-        LOGE("AndroidBitmap_lockPixels() failed ! error=%d", ret);
-        return;
-    }
+    uint8_t *pixels = (uint8_t *)(env->GetDirectBufferAddress(bitmap));
+    pixels += offset;
 
     // FIXME
     if(!grids) {
@@ -1048,9 +1038,7 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_renderFrame(
 
     if(dir) acc[0] *= -1;
 
-    fn->draw(info.width, info.height, (char *)pixels, info.stride, pal_idx, dir, acc);
-
-    AndroidBitmap_unlockPixels(env, bitmap);
+    fn->draw(w, h, pixels, w*3, pal_idx, dir, acc);
 }
 
 JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnWallpaper_evolve(
