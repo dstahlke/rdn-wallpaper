@@ -114,7 +114,6 @@ public class RdnWallpaper extends GLWallpaperService {
         private boolean mDoRotate;
         private int mGridW;
         private int mGridH;
-        private Bitmap mBitmap; // FIXME
         private SharedPreferences mPrefs;
         private ReentrantLock mDrawLock = new ReentrantLock();
         private MyRenderer renderer;
@@ -124,49 +123,6 @@ public class RdnWallpaper extends GLWallpaperService {
         private int mProfileTicks = 0;
 
         private OrientationReader mOrientation = new OrientationReader();
-
-        class DrawThread extends Thread {
-            boolean mRunning = false;
-            boolean mAlive = true;
-            private Object mRunningLock = new Object();
-
-            DrawThread() {
-                super("RDN Draw Thread");
-            }
-
-            public void run() {
-                if(DEBUG) Log.i(TAG, "mDrawThread started");
-                while(true) {
-                    synchronized(mRunningLock) {
-                        while(!mRunning && mAlive) {
-                            try {
-                                mRunningLock.wait();
-                            } catch(InterruptedException e) { }
-                        }
-                        if(!mAlive) break;
-                    }
-
-                    drawFrame();
-
-                    yield();
-                }
-                if(DEBUG) Log.i(TAG, "mDrawThread exit");
-            }
-
-            public void setRunning(boolean x) {
-                synchronized(mRunningLock) {
-                    mRunning = x;
-                    mRunningLock.notify();
-                }
-            }
-
-            public void requestShutdown() {
-                synchronized(mRunningLock) {
-                    mAlive = false;
-                    mRunningLock.notify();
-                }
-            }
-        }
 
         class MyRenderer implements GLWallpaperService.Renderer {
             private Context context;
@@ -206,10 +162,6 @@ public class RdnWallpaper extends GLWallpaperService {
                         mOrientation.mVal[2]);
 
                 long t3 = SystemClock.uptimeMillis();
-
-                //Log.i(TAG, "bitmap="+mBitmap.getRowBytes()+","+mBitmap.getHeight()+","+pixelBuffer.remaining());
-                pixelBuffer.rewind();
-                //mBitmap.copyPixelsToBuffer(pixelBuffer);
 
                 // Clear the surface
                 gl.glClearColorx(0, 0, 0, 0);
@@ -308,7 +260,7 @@ public class RdnWallpaper extends GLWallpaperService {
 
                 rdnSetSize(width, height);
 
-                pixelBuffer = ByteBuffer.allocateDirect(mBitmap.getRowBytes()*mBitmap.getHeight());
+                pixelBuffer = ByteBuffer.allocateDirect(mGridW*mGridH*bpp);
 
                 gl.glShadeModel(GL11.GL_FLAT);
                 gl.glFrontFace(GL11.GL_CCW);
@@ -513,113 +465,11 @@ public class RdnWallpaper extends GLWallpaperService {
             mGridH = 256; // FIXME
             if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
             if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
-
-            mDrawLock.lock(); try {
-                mBitmap = Bitmap.createBitmap(mGridW, mGridH*2, Bitmap.Config.ARGB_8888);
-            } finally { mDrawLock.unlock(); }
         }
 
         public void wakeup() {
             if(DEBUG) Log.i(TAG, "MyEngine.wakeup");
             onVisibilityChanged(true);
-        }
-
-        void drawFrame() {
-            // FIXME - Is a lock needed?  Can holder.lockCanvas deadlock if surface is
-            // destroyed?
-            final SurfaceHolder holder = getSurfaceHolder();
-
-            Canvas c = null;
-            try {
-                c = holder.lockCanvas();
-                holder.setFormat(PixelFormat.RGBA_8888);
-                if(c != null) {
-                    mDrawLock.lock(); try {
-                        doDraw(c);
-                    } finally { mDrawLock.unlock(); }
-                }
-            } finally {
-                if(c != null) holder.unlockCanvasAndPost(c);
-            }
-        }
-
-        private void doDraw(Canvas c) {
-            c.save();
-            if(mDoRotate) {
-                c.rotate(-90);
-                c.translate(-mWidth+1,0);
-            }
-
-            long t1 = SystemClock.uptimeMillis();
-
-            evolve();
-
-            long t2 = SystemClock.uptimeMillis();
-
-            long t3 = SystemClock.uptimeMillis();
-            c.save();
-            c.scale(mRes, mRes);
-            mPaint.setFilterBitmap(true);
-
-            //renderFrame(mBitmap, 0,
-            //        mOrientation.mVal[0],
-            //        mOrientation.mVal[1],
-            //        mOrientation.mVal[2]);
-            for(int x = 0; x < mRepeatX; x++)
-            for(int y = 0; y < mRepeatY; y++) {
-                if(y % 2 == 0) {
-                    c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
-                }
-            }
-
-            if(mRepeatY > 1) {
-            //    renderFrame(mBitmap, 1,
-            //            mOrientation.mVal[0],
-            //            mOrientation.mVal[1],
-            //            mOrientation.mVal[2]);
-            }
-            c.save();
-            Matrix m = new Matrix();
-            m.preScale(-1, 1);
-            m.postTranslate(mGridW*mRepeatX, 0);
-            c.concat(m);
-            for(int x = 0; x < mRepeatX; x++)
-            for(int y = 0; y < mRepeatY; y++) {
-                if(y % 2 == 1) {
-                    c.drawBitmap(mBitmap, x * mGridW, y * mGridH, mPaint);
-                }
-            }
-            c.restore();
-
-            c.restore();
-
-            long tf = SystemClock.uptimeMillis();
-            long gap = tf - mLastDrawTime;
-            mLastDrawTime = tf;
-
-            mProfileAccum[0] += gap;
-            mProfileAccum[1] += t2-t1;
-            mProfileAccum[2] += t3-t2;
-            mProfileAccum[3] += tf-t2;
-            mProfileTicks++;
-
-            if(mProfileTicks == 10) {
-                for(int i=0; i<mProfileAccum.length; i++) {
-                    mProfileTimes[i] = mProfileAccum[i] / mProfileTicks;
-                    mProfileAccum[i] = 0;
-                }
-                mProfileTicks = 0;
-            }
-
-            if(DEBUG) {
-                c.drawText("time="+t1, 10, 80, mPaint);
-                c.drawText("gap=" +mProfileTimes[0], 10, 100, mPaint);
-                c.drawText("calc="+mProfileTimes[1], 10, 120, mPaint);
-                c.drawText("rend="+mProfileTimes[2], 10, 140, mPaint);
-                c.drawText("draw="+mProfileTimes[3], 10, 160, mPaint);
-            }
-
-            c.restore();
         }
     }
 
