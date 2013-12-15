@@ -37,8 +37,6 @@ public class RdnWallpaper extends GLWallpaperService {
             setRenderer(renderer);
             setRenderMode(RENDERMODE_CONTINUOUSLY);
             mRecentWaker.add(this);
-            // FIXME - maybe this should go into GLWallpaperService
-            onVisibilityChanged(false);
         }
 
         @Override
