@@ -47,8 +47,6 @@ class RdnRenderer implements
     private static final boolean DEBUG = RdnWallpaper.DEBUG;
     private static final int bpp = 3;
 
-    private final long mFrameInterval = 50; // FIXME - unused
-
     private Context mContext;
     private int mRes = 4;
     private int mRepeatX = 1;
@@ -101,10 +99,14 @@ class RdnRenderer implements
         mPrefs.registerOnSharedPreferenceChangeListener(this);
 
         setParamsToPrefs();
+
+        onVisibilityChanged(false);
     }
 
     public void release() {
-        // FIXME
+        onVisibilityChanged(false);
+        mPrefs.unregisterOnSharedPreferenceChangeListener(this);
+        mAccelerometer.onPause();
     }
 
     public void onVisibilityChanged(boolean visible) {
@@ -151,10 +153,10 @@ class RdnRenderer implements
         gl.glClear(GL11.GL_COLOR_BUFFER_BIT);
 
         gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
-        //gl.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, mGridW, mGridH,
-        //                   GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
-        gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
-                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
+        gl.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, mGridW, mGridH,
+                           GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
+        //gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
+        //        0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
 
         int[] textureCrop = new int[4];
         textureCrop[0] = 0;
@@ -227,7 +229,7 @@ class RdnRenderer implements
                     ", calc="+mProfileTimes[1]+
                     ", rend="+mProfileTimes[2]+
                     ", draw="+mProfileTimes[3]+
-                    ", obj="+this);
+                    ", size="+mGridW+","+mGridH);
             }
         }
 
