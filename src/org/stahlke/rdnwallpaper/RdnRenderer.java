@@ -31,7 +31,7 @@ class RdnRenderer implements
     GLWallpaperService.Renderer,
     SharedPreferences.OnSharedPreferenceChangeListener
 {
-    // jni method
+    // jni methods
     public static native void evolve();
     public static native void renderFrame(ByteBuffer bitmap, int w, int h, int offset,
             int dir, float acc_x, float acc_y, float acc_z);
@@ -56,6 +56,8 @@ class RdnRenderer implements
     private int mHeight;
     private int mGridW;
     private int mGridH;
+    private int mTexW;
+    private int mTexH;
     private SharedPreferences mPrefs;
     private ReentrantLock mDrawLock = new ReentrantLock();
     private ByteBuffer mPixelBuffer;
@@ -84,6 +86,16 @@ class RdnRenderer implements
                  0f, 0f, 0f, 1f, 0f,
                  0f, 0f, 0f, 0f, 1f };
         cm.postConcat(new ColorMatrix(mat));
+    }
+
+    private static int nextPow2(int x) {
+        x -= 1;
+        int y = 1;
+        while(x > 0) {
+            x >>= 1;
+            y <<= 1;
+        }
+        return y;
     }
 
     RdnRenderer(Context context) {
@@ -155,19 +167,6 @@ class RdnRenderer implements
         gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
         gl.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, mGridW, mGridH,
                            GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
-        //gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
-        //        0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
-
-        int[] textureCrop = new int[4];
-        textureCrop[0] = 0;
-        textureCrop[1] = 0;
-        textureCrop[2] = mGridW;
-        textureCrop[3] = mGridH;
-        // Draw the texture on the surface
-        gl.glTexParameteriv(GL10.GL_TEXTURE_2D, GL11Ext.GL_TEXTURE_CROP_RECT_OES, textureCrop, 0);
-
-        //((GL11Ext) gl).glDrawTexiOES(
-        //    x*mGridW*mRes, y*mGridH*mRes, 0, mGridW*mRes-1, mGridH*mRes-1);
 
         for(int x=0; x<mRepeatX; x++)
         for(int y=0; y<(mRepeatY+1)/2; y++) {
@@ -187,14 +186,16 @@ class RdnRenderer implements
             });
             vertexBuffer.position(0);
 
+            float tx = (float)mGridW / mTexW;
+            float ty = (float)mGridH / mTexH;
             ByteBuffer tbb = ByteBuffer.allocateDirect(8 * 4);
             tbb.order(ByteOrder.nativeOrder());
             FloatBuffer texBuffer = tbb.asFloatBuffer();
             texBuffer.put(new float[] {
-                0.0f, 1.0f,
-                1.0f, 1.0f,
+                0.0f, ty,
+                tx, ty,
                 0.0f, 0.0f,
-                1.0f, 0.0f
+                tx, 0.0f
             });
             texBuffer.position(0);
 
@@ -229,7 +230,8 @@ class RdnRenderer implements
                     ", calc="+mProfileTimes[1]+
                     ", rend="+mProfileTimes[2]+
                     ", draw="+mProfileTimes[3]+
-                    ", size="+mGridW+","+mGridH);
+                    ", size="+mGridW+","+mGridH+
+                    ", tex="+mTexW+","+mTexH);
             }
         }
 
@@ -246,7 +248,6 @@ class RdnRenderer implements
         GL11 gl = (GL11)gl10;
 
         rdnSetSize(width, height);
-
         mPixelBuffer = ByteBuffer.allocateDirect(mGridW*mGridH*bpp);
 
         gl.glShadeModel(GL11.GL_FLAT);
@@ -278,17 +279,14 @@ class RdnRenderer implements
         gl.glGenTextures(1, textures, 0);
         mTextureId = textures[0];
 
-        // we want to modify this texture so bind it
         gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
 
-        // GL_LINEAR gives us smoothing since the texture is larger than the screen
         gl.glTexParameterf(GL10.GL_TEXTURE_2D,
                            GL10.GL_TEXTURE_MAG_FILTER,
                            GL10.GL_LINEAR);
         gl.glTexParameterf(GL10.GL_TEXTURE_2D,
                            GL10.GL_TEXTURE_MIN_FILTER,
                            GL10.GL_LINEAR);
-        // repeat the edge pixels if a surface is larger than the texture
         gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S,
                            GL10.GL_CLAMP_TO_EDGE);
         gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T,
@@ -296,9 +294,13 @@ class RdnRenderer implements
         //gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_REPEAT);
         //gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_REPEAT);
 
-        // and init the GL texture with the pixels
-        gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mGridW, mGridH,
-                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, mPixelBuffer);
+        // It seems that pow2 sizes are not needed unless GL_REPEAT is used, but it
+        // never hurts to be careful.
+        mTexW = nextPow2(mGridW);
+        mTexH = nextPow2(mGridH);
+
+        gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mTexW, mTexH,
+                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, null);
     }
 
     private int getFnIdx() {
