@@ -12,7 +12,7 @@ public class RdnWallpaper extends GLWallpaperService {
     public static RecentWaker mRecentWaker = new RecentWaker();
 
     static public int getDefaultRes(int w, int h) {
-        return 4;
+        return 3;
     }
 
     static public int getDefaultRepeatX(int w, int h) {

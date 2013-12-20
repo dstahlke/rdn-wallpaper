@@ -407,22 +407,20 @@ struct GinzburgLandau : public FunctionBase<2> {
             int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
-                float U = bufA[x][0];
-                float V = bufA[x][1];
-                float lU = bufL[x][0];
-                float lV = bufL[x][1];
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
+                float rv = bufA[x].dot(bufA[x]);
+                float lv = parent.D * bufL[x].dot(bufL[x]);
 
-                float rotA = U*lV - V*lU;
-                float rotB = U*lU + V*lV;
+                float green = 0;
+                float blue  = lv * 500 * diffuse;
+                float red   = rv * 100 * diffuse + blue;
 
-                float green =  70.0f - rotA * 1000.0;
-                float blue  =  70.0f - rotB * 1000.0;
-                float red   = 0; //-70.0f + rv * 200.0f;
-
-                red   *= diffuse;
-                green *= diffuse;
-                blue  *= diffuse;
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -439,20 +437,22 @@ struct GinzburgLandau : public FunctionBase<2> {
             int w, int stride, Eigen::Vector3f acc
         ) {
             for(int x = 0; x < w; x++) {
+                float U = bufA[x][0];
+                float V = bufA[x][1];
+                float lU = bufL[x][0];
+                float lV = bufL[x][1];
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
-                float rv = bufA[x].dot(bufA[x]);
-                float lv = parent.D * bufL[x].dot(bufL[x]);
 
-                float green = 0;
-                float blue  = lv * 500 * diffuse;
-                float red   = rv * 100 * diffuse + blue;
+                float rotA = U*lV - V*lU;
+                float rotB = U*lU + V*lV;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                float green =  70.0f - rotA * 1000.0;
+                float blue  =  70.0f - rotB * 1000.0;
+                float red   = 0; //-70.0f + rv * 200.0f;
+
+                red   *= diffuse;
+                green *= diffuse;
+                blue  *= diffuse;
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
