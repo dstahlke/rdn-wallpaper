@@ -1,5 +1,6 @@
 TODO:
     good defaults
+    hue defaults
     test fresh install
     website
 

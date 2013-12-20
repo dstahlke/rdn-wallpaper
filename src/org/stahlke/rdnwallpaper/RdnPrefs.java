@@ -109,7 +109,13 @@ public class RdnPrefs extends PreferenceActivity implements
         int f_id = Integer.parseInt(prefs.getString("function", "0"));
         int pal = prefs.getInt("palette"+f_id, 0);
         String key = "hue"+f_id+"_"+pal;
-        float hue = prefs.getFloat(key, 0);
+
+        TypedArray preset_vals = getContext().getResources().obtainTypedArray(
+                getContext().getResources().getIdentifier(
+                    "default_hue_"+f_id, "array", getContext().getPackageName()));
+        float default_val = preset_vals.getFloat(pal, 0);
+
+        float hue = prefs.getFloat(key, default_val);
         mHueSlider.setKey(key);
         mHueSlider.setValue(hue);
     }
