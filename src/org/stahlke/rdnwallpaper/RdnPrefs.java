@@ -78,6 +78,8 @@ public class RdnPrefs extends PreferenceActivity implements
         if(prefs.getString(id, "0").equals("0")) {
             ListPreference pref = (ListPreference)findPreference(id);
             pref.setValue(""+val);
+            // Without this, the labels sometimes don't show.
+            pref.setSummary("%s");
         }
     }
 

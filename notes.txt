@@ -1,7 +1,5 @@
 TODO:
     good defaults
-    default downsample -> 3
-    downsample/res don't initially show numbers
     maybe save a per-palette hue
     test fresh install
     website
