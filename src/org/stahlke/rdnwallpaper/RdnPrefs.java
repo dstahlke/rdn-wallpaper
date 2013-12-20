@@ -21,6 +21,7 @@ public class RdnPrefs extends PreferenceActivity implements
     //private ParamsView mView;
     private int mLastFunction = -1;
     private List<List<SeekBarPreference>> sliders;
+    private SeekBarPreference mHueSlider;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -30,6 +31,9 @@ public class RdnPrefs extends PreferenceActivity implements
         SharedPreferences prefs = PreferenceManager
                 .getDefaultSharedPreferences(this);
         prefs.registerOnSharedPreferenceChangeListener(this);
+
+        // Get a ref to this now, because its key will change in setHueKey.
+        mHueSlider = (SeekBarPreference)findPreference("hue");
 
         sliders = new ArrayList<List<SeekBarPreference>>();
         for(int i=0; ; i++) {
@@ -67,6 +71,8 @@ public class RdnPrefs extends PreferenceActivity implements
         setListDefaultIfZero("repeatX", RdnWallpaper.getDefaultRepeatX(w, h));
         setListDefaultIfZero("repeatY", RdnWallpaper.getDefaultRepeatY(w, h));
 
+        setHueKey();
+
         // This is a hack to make the animation start running again (Android
         // pauses wallpapers when the settings dialog is opened).
         RdnWallpaper.mRecentWaker.wakeupLatest();
@@ -84,13 +90,28 @@ public class RdnPrefs extends PreferenceActivity implements
     }
 
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "RdnPrefs.onSharedPreferenceChanged");
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "RdnPrefs.onSharedPreferenceChanged: "+key);
         updateFunction(true);
 
         setListTitleToVal("function");
         setListSummaryToVal("resolution");
         setListSummaryToVal("repeatX");
         setListSummaryToVal("repeatY");
+
+        if(key.equals("function") || key.startsWith("palette")) {
+            setHueKey();
+        }
+    }
+
+    private void setHueKey() {
+        SharedPreferences prefs = PreferenceManager
+                .getDefaultSharedPreferences(this);
+        int f_id = Integer.parseInt(prefs.getString("function", "0"));
+        int pal = prefs.getInt("palette"+f_id, 0);
+        String key = "hue"+f_id+"_"+pal;
+        float hue = prefs.getFloat(key, 0);
+        mHueSlider.setKey(key);
+        mHueSlider.setValue(hue);
     }
 
     private void setListTitleToVal(String id) {

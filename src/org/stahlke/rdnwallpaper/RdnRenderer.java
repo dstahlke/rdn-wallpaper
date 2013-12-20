@@ -339,7 +339,8 @@ class RdnRenderer implements
         int pal = mPrefs.getInt("palette"+fn_idx, 0);
         if(DEBUG) Log.i(TAG, "palette="+pal);
 
-        float newHue = mPrefs.getFloat("hue", 0);
+        String hue_key = "hue"+fn_idx+"_"+pal;
+        float newHue = mPrefs.getFloat(hue_key, 0);
 
         ColorMatrix cm = new ColorMatrix();
         adjustHue(cm, newHue / 180f * (float)Math.PI);

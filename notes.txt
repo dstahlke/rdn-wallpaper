@@ -1,6 +1,5 @@
 TODO:
     good defaults
-    maybe save a per-palette hue
     test fresh install
     website
 
