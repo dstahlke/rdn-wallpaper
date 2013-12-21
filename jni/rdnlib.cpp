@@ -165,6 +165,21 @@ public:
     }
 
     template <typename T, typename U>
+    static inline float get_diffuse_cross(
+        const T &A,
+        const T &DX,
+        const T &DY,
+        const U &acc
+    ) {
+        Eigen::Vector3f surf;
+        surf[0] = (DX[0]*A[1] - DX[1]*A[0]) * 1.0f;
+        surf[1] = (DY[0]*A[1] - DY[1]*A[0]) * 1.0f;
+        surf[2] = 1;
+        surf.normalize();
+        return std::max(0.0f, surf.dot(acc));
+    }
+
+    template <typename T, typename U>
     static inline float get_diffuse_A(
         const T &A,
         const T &DX,
@@ -441,7 +456,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                 float V = bufA[x][1];
                 float lU = bufL[x][0];
                 float lV = bufL[x][1];
-                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
+                float diffuse = get_diffuse_cross(bufA[x], bufDX[x], bufDY[x], acc);
 
                 float rotA = U*lV - V*lU;
                 float rotB = U*lU + V*lV;
