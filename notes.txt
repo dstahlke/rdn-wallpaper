@@ -1,6 +1,4 @@
 TODO:
-    good defaults
-    check that presets work
     test fresh install
     website
 
@@ -12,3 +10,4 @@ To take screenshot:
         stop in org.stahlke.rdnwallpaper.RdnWallpaper$MyEngine.drawFrame
     Open the monitor and take screenshot
     Exit jdb
+

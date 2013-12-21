@@ -73,6 +73,8 @@
             rdnwallpaper:format="k: %.4f"
             />
 
+        <!--
+    Quanternion Ginzburg-Landau
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_2_0"
             android:defaultValue="1.0"
@@ -98,7 +100,7 @@
             rdnwallpaper:format="β: %.3f"
             />
 
-        <!--
+    Wacher-Scholl
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_2_0"
             android:defaultValue="0.1"
