@@ -525,13 +525,13 @@ struct GinzburgLandauQ : public FunctionBase<4> {
         D(2.0F),
         alpha(0.0625F),
         beta (1.0F   ),
-        pal_gl1(new PaletteGL1(*this)),
-        pal_gl2(new PaletteGL2(*this))
+        pal_gl0(new PaletteGL0(*this)),
+        pal_gl1(new PaletteGL1(*this))
     { }
 
     ~GinzburgLandauQ() {
+        delete(pal_gl0);
         delete(pal_gl1);
-        delete(pal_gl2);
     }
 
     virtual vecn get_background_val() {
@@ -600,6 +600,33 @@ struct GinzburgLandauQ : public FunctionBase<4> {
         }
     }
 
+    struct PaletteGL0 : public Palette<n> {
+        PaletteGL0(GinzburgLandauQ &x) : parent(x) { }
+
+        void render_line(uint8_t *pix_line,
+            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
+            int w, int stride, Eigen::Vector3f acc
+        ) {
+            for(int x = 0; x < w; x++) {
+                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
+
+                float green = 25.0f + 150.0f*diffuse;
+                float blue  = 0;
+                float red   = 0;
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
+
+                to_rgb24(pix_line, red, green, blue); pix_line += stride;
+            }
+        }
+
+        GinzburgLandauQ &parent;
+    };
+
     struct PaletteGL1 : public Palette<n> {
         PaletteGL1(GinzburgLandauQ &x) : parent(x) { }
 
@@ -630,46 +657,18 @@ struct GinzburgLandauQ : public FunctionBase<4> {
         GinzburgLandauQ &parent;
     };
 
-    struct PaletteGL2 : public Palette<n> {
-        PaletteGL2(GinzburgLandauQ &x) : parent(x) { }
-
-        void render_line(uint8_t *pix_line,
-            vecn *bufA, vecn *bufL, vecn *bufDX, vecn *bufDY,
-            int w, int stride, Eigen::Vector3f acc
-        ) {
-            for(int x = 0; x < w; x++) {
-                float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
-
-                float green = 25.0f + 150.0f*diffuse;
-                float blue  = 0;
-                float red   = 0;
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
-
-                to_rgb24(pix_line, red, green, blue); pix_line += stride;
-            }
-        }
-
-        GinzburgLandauQ &parent;
-    };
-
     virtual Palette<n> *get_palette(int id) {
         switch(id) {
-            case 0: return pal_gl1; // FIXME
+            case 0: return pal_gl0;
             case 1: return pal_gl1;
-            case 2: return pal_gl2;
-            default: return pal_gl1;
+            default: return pal_gl0;
         }
     }
 
     float D, alpha, beta;
     matnn fmat, dmat;
+    Palette<n> *pal_gl0;
     Palette<n> *pal_gl1;
-    Palette<n> *pal_gl2;
 };
 
 struct GrayScott : public FunctionBase<2> {
