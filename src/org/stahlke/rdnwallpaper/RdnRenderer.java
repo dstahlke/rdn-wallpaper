@@ -58,6 +58,8 @@ class RdnRenderer implements
     private int mGridH;
     private int mTexW;
     private int mTexH;
+    private int mOldTexW;
+    private int mOldTexH;
     private SharedPreferences mPrefs;
     private ReentrantLock mDrawLock = new ReentrantLock();
     private ByteBuffer mPixelBuffer;
@@ -141,23 +143,53 @@ class RdnRenderer implements
     public void onDrawFrame_inner(GL10 gl10) {
         GL11 gl = (GL11)gl10;
 
+        // It seems that pow2 sizes are not needed unless GL_REPEAT is used, but it
+        // never hurts to be careful.
+        mTexW = nextPow2(mGridW);
+        mTexH = nextPow2(mGridH);
+
+        if(mOldTexW != mTexW || mOldTexH != mTexH) {
+            if(DEBUG) Log.i(TAG, "realloc tex="+mTexW+","+mTexH);
+
+            if (mTextureId != -1) {
+                gl.glDeleteTextures(1, new int[] { mTextureId }, 0);
+            }
+
+            int[] textures = new int[1];
+            gl.glGenTextures(1, textures, 0);
+            mTextureId = textures[0];
+
+            gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
+
+            gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_MAG_FILTER, GL10.GL_LINEAR);
+            gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_MIN_FILTER, GL10.GL_LINEAR);
+            gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_CLAMP_TO_EDGE);
+            gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_CLAMP_TO_EDGE);
+
+            gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mTexW, mTexH,
+                    0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, null);
+
+            mOldTexW = mTexW;
+            mOldTexH = mTexH;
+        }
+
         long t1 = SystemClock.uptimeMillis();
 
         evolve();
 
         long t2 = SystemClock.uptimeMillis();
 
-        renderFrame(mPixelBuffer, mGridW, mGridH/2, 0, 0,
-                mAccelerometer.mVal[0],
-                mAccelerometer.mVal[1],
-                mAccelerometer.mVal[2]);
-
         if(mRepeatY > 1) {
-            renderFrame(mPixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*bpp, 1,
+            renderFrame(mPixelBuffer, mGridW, mGridH/2, 0, 0,
                     mAccelerometer.mVal[0],
                     mAccelerometer.mVal[1],
                     mAccelerometer.mVal[2]);
         }
+
+        renderFrame(mPixelBuffer, mGridW, mGridH/2, mGridW*(mGridH/2)*bpp, 1,
+                mAccelerometer.mVal[0],
+                mAccelerometer.mVal[1],
+                mAccelerometer.mVal[2]);
 
         long t3 = SystemClock.uptimeMillis();
 
@@ -247,8 +279,18 @@ class RdnRenderer implements
     private void onSurfaceChanged_inner(GL10 gl10, int width, int height) {
         GL11 gl = (GL11)gl10;
 
-        rdnSetSize(width, height);
-        mPixelBuffer = ByteBuffer.allocateDirect(mGridW*mGridH*bpp);
+        if(height > width) {
+            mWidth = width;
+            mHeight = height;
+        } else {
+            mWidth = height;
+            mHeight = width;
+        }
+
+        // might need to update resolution/tiling
+        setParamsToPrefs();
+
+        reshapeGrid();
 
         gl.glShadeModel(GL11.GL_FLAT);
         gl.glFrontFace(GL11.GL_CCW);
@@ -271,36 +313,7 @@ class RdnRenderer implements
             (rot_key == Surface.ROTATION_270) ? 270 : 0;
         gl.glRotatef(rot_ang, 0.0f, 0.0f, 1.0f);
 
-        if (mTextureId != -1) {
-            gl.glDeleteTextures(1, new int[] { mTextureId }, 0);
-        }
-
-        int[] textures = new int[1];
-        gl.glGenTextures(1, textures, 0);
-        mTextureId = textures[0];
-
-        gl.glBindTexture(GL11.GL_TEXTURE_2D, mTextureId);
-
-        gl.glTexParameterf(GL10.GL_TEXTURE_2D,
-                           GL10.GL_TEXTURE_MAG_FILTER,
-                           GL10.GL_LINEAR);
-        gl.glTexParameterf(GL10.GL_TEXTURE_2D,
-                           GL10.GL_TEXTURE_MIN_FILTER,
-                           GL10.GL_LINEAR);
-        gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S,
-                           GL10.GL_CLAMP_TO_EDGE);
-        gl.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T,
-                           GL10.GL_CLAMP_TO_EDGE);
-        //gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_REPEAT);
-        //gl.glTexParameteri(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_REPEAT);
-
-        // It seems that pow2 sizes are not needed unless GL_REPEAT is used, but it
-        // never hurts to be careful.
-        mTexW = nextPow2(mGridW);
-        mTexH = nextPow2(mGridH);
-
-        gl.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB, mTexW, mTexH,
-                0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, null);
+        if(DEBUG) Log.i(TAG, "RDN surface changed: "+width+"x"+height+" rot="+rot_ang);
     }
 
     private int getFnIdx() {
@@ -364,31 +377,18 @@ class RdnRenderer implements
         if(newRepeatY == 0) newRepeatY = RdnWallpaper.getDefaultRepeatY(mWidth, mHeight);
         if(DEBUG) Log.i(TAG, "     -> "+newRes+","+newRepeatX+","+newRepeatY);
 
-        if(
-            newRes != mRes ||
-            newRepeatX != mRepeatX ||
-            newRepeatY != mRepeatY
-        ) {
-            mRes = newRes;
-            mRepeatX = newRepeatX;
-            mRepeatY = newRepeatY;
-            reshapeGrid();
-        }
-    }
-
-    private void rdnSetSize(int width, int height) {
-        if(height > width) {
-            mWidth = width;
-            mHeight = height;
-        } else {
-            mWidth = height;
-            mHeight = width;
-        }
-
-        // might need to update resolution/tiling
-        setParamsToPrefs();
-
-        reshapeGrid();
+        mDrawLock.lock(); try {
+            if(
+                newRes != mRes ||
+                newRepeatX != mRepeatX ||
+                newRepeatY != mRepeatY
+            ) {
+                mRes = newRes;
+                mRepeatX = newRepeatX;
+                mRepeatY = newRepeatY;
+                reshapeGrid();
+            }
+        } finally { mDrawLock.unlock(); }
     }
 
     private void reshapeGrid() {
@@ -397,6 +397,7 @@ class RdnRenderer implements
         mGridW -= mGridW % 4;
         if(DEBUG) Log.i(TAG, "wh="+mWidth+","+mHeight);
         if(DEBUG) Log.i(TAG, "grid="+mGridW+","+mGridH);
+        mPixelBuffer = ByteBuffer.allocateDirect(mGridW*mGridH*bpp);
     }
 
     private class AccelerometerReader implements SensorEventListener {
