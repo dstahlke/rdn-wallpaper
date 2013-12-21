@@ -61,8 +61,8 @@
             android:defaultValue="0.01"
             rdnwallpaper:min="0.000"
             rdnwallpaper:max="0.120"
-            rdnwallpaper:rate="0.00001"
-            rdnwallpaper:format="F: %.6f"
+            rdnwallpaper:rate="0.00003"
+            rdnwallpaper:format="F: %.4f"
             />
         <org.stahlke.rdnwallpaper.SeekBarPreference
             android:key="param_1_2"
