@@ -14,6 +14,7 @@ import android.preference.Preference.OnPreferenceChangeListener;
 import android.preference.PreferenceActivity;
 import android.widget.Toast;
 import android.util.Log;
+import android.content.res.TypedArray;
 
 public class RdnPrefs extends PreferenceActivity implements
     SharedPreferences.OnSharedPreferenceChangeListener
@@ -103,6 +104,21 @@ public class RdnPrefs extends PreferenceActivity implements
         }
     }
 
+    public static float getHueVal(Context ctx) {
+        SharedPreferences prefs = PreferenceManager
+                .getDefaultSharedPreferences(ctx);
+        int f_id = Integer.parseInt(prefs.getString("function", "0"));
+        int pal = prefs.getInt("palette"+f_id, 0);
+        String key = "hue"+f_id+"_"+pal;
+
+        TypedArray preset_vals = ctx.getResources().obtainTypedArray(
+                ctx.getResources().getIdentifier(
+                    "default_hue_"+f_id, "array", ctx.getPackageName()));
+        float default_val = preset_vals.getFloat(pal, 0);
+
+        return prefs.getFloat(key, default_val);
+    }
+
     private void setHueKey() {
         SharedPreferences prefs = PreferenceManager
                 .getDefaultSharedPreferences(this);
@@ -110,12 +126,8 @@ public class RdnPrefs extends PreferenceActivity implements
         int pal = prefs.getInt("palette"+f_id, 0);
         String key = "hue"+f_id+"_"+pal;
 
-        TypedArray preset_vals = getContext().getResources().obtainTypedArray(
-                getContext().getResources().getIdentifier(
-                    "default_hue_"+f_id, "array", getContext().getPackageName()));
-        float default_val = preset_vals.getFloat(pal, 0);
+        float hue = getHueVal(getApplicationContext());
 
-        float hue = prefs.getFloat(key, default_val);
         mHueSlider.setKey(key);
         mHueSlider.setValue(hue);
     }

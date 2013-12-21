@@ -139,11 +139,23 @@
         <item>C</item>
     </string-array>
 
+    <array name="default_hue_0">
+        <item>250</item>
+        <item>68</item>
+        <item>90</item>
+    </array>
+
     <string-array name="palettes1">
         <item>A</item>
         <item>B</item>
         <item>C</item>
     </string-array>
+
+    <array name="default_hue_1">
+        <item>250</item>
+        <item>77</item>
+        <item>90</item>
+    </array>
 
     <string-array name="palettes2">
         <item>A</item>
