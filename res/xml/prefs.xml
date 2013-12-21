@@ -160,6 +160,7 @@
             rdnwallpaper:min="0.0"
             rdnwallpaper:max="360.0"
             rdnwallpaper:rate="1.0"
+            rdnwallpaper:loop="true"
             rdnwallpaper:format="Hue: %.0f"
             />
     </PreferenceCategory>

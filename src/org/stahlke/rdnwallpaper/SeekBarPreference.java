@@ -30,6 +30,7 @@ public class SeekBarPreference extends Preference {
     private float mMaxValue = 100;
     private float mMinValue = 0;
     private float mStepValue = 1;
+    private boolean mLoop = false;
     private float mCurrentValue;
     private String mFormat;
     private TheView mSeekBar;
@@ -158,10 +159,11 @@ public class SeekBarPreference extends Preference {
                 if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "step="+delta+"*"+mStepValue);
                 newValue += delta * mStepValue;
 
-                if(newValue > mMaxValue)
-                    newValue = mMaxValue;
-                else if(newValue < mMinValue)
-                    newValue = mMinValue;
+                if(newValue > mMaxValue) {
+                    newValue = mLoop ? mMinValue : mMaxValue;
+                } else if(newValue < mMinValue) {
+                    newValue = mLoop ? mMaxValue : mMinValue;
+                }
             }
 
             if(newValue != mCurrentValue) {
@@ -250,6 +252,7 @@ public class SeekBarPreference extends Preference {
         mMaxValue = attrs.getAttributeFloatValue(RDNWALLPAPERNS, "max", 100);
         mStepValue = attrs.getAttributeFloatValue(RDNWALLPAPERNS, "rate",
                 (mMaxValue - mMinValue) / 1000f);
+        mLoop = attrs.getAttributeBooleanValue(RDNWALLPAPERNS, "loop", false);
 
         String summary = attrs.getAttributeValue(ANDROIDNS, "summary");
         if(summary == null) summary = "";
