@@ -1,6 +1,7 @@
 TODO:
     test fresh install
     website
+    sometimes two can be running at once
 
 To take screenshot:
     Exit the monitor
