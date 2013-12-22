@@ -283,6 +283,8 @@ struct FunctionBase : FunctionBaseBase {
                 reset_grid(grids);
             }
         }
+
+        gradient_dirty = 1;
     }
 
     void reset_grid() {
@@ -313,6 +315,8 @@ struct FunctionBase : FunctionBaseBase {
                 }
             }
         }
+
+        gradient_dirty = 1;
     }
 
     void draw(
@@ -323,7 +327,10 @@ struct FunctionBase : FunctionBaseBase {
         GridsN<n> *grids = get_grids(w, h);
         if(!grids) return;
 
-        if(dir == 0) grids->compute_gradient();
+        if(gradient_dirty) {
+            grids->compute_gradient();
+            gradient_dirty = 0;
+        }
 
         Palette<n> *pal = get_palette(pal_idx);
 
@@ -338,6 +345,8 @@ struct FunctionBase : FunctionBaseBase {
             pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, stride, acc);
         }
     }
+
+    bool gradient_dirty;
 };
 
 struct GinzburgLandau : public FunctionBase<2> {
@@ -1051,6 +1060,8 @@ JNIEXPORT void JNICALL Java_org_stahlke_rdnwallpaper_RdnRenderer_renderFrame(
     acc.normalize();
 
     if(dir) acc[0] *= -1;
+
+    //LOGI("acc=%f,%f,%f", acc[0], acc[1], acc[2]);
 
     fn->draw(w, h, pixels, w*3, pal_idx, dir, acc);
 }

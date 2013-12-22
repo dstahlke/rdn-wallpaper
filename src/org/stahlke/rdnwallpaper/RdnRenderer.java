@@ -263,7 +263,8 @@ class RdnRenderer implements
                     ", rend="+mProfileTimes[2]+
                     ", draw="+mProfileTimes[3]+
                     ", size="+mGridW+","+mGridH+
-                    ", tex="+mTexW+","+mTexH);
+                    ", tex="+mTexW+","+mTexH+
+                    ", acc="+mAccelerometer.mVal[0]+","+mAccelerometer.mVal[1]+","+mAccelerometer.mVal[2]);
             }
         }
 
@@ -279,12 +280,15 @@ class RdnRenderer implements
     private void onSurfaceChanged_inner(GL10 gl10, int width, int height) {
         GL11 gl = (GL11)gl10;
 
+        boolean flip_wh;
         if(height > width) {
             mWidth = width;
             mHeight = height;
+            flip_wh = false;
         } else {
             mWidth = height;
             mHeight = width;
+            flip_wh = true;
         }
 
         // might need to update resolution/tiling
@@ -311,9 +315,18 @@ class RdnRenderer implements
             (rot_key == Surface.ROTATION_90) ? 90 :
             (rot_key == Surface.ROTATION_180) ? 180 :
             (rot_key == Surface.ROTATION_270) ? 270 : 0;
-        gl.glRotatef(rot_ang, 0.0f, 0.0f, 1.0f);
 
-        if(DEBUG) Log.i(TAG, "RDN surface changed: "+width+"x"+height+" rot="+rot_ang);
+        if(DEBUG) Log.i(TAG, "RDN surface changed: "+width+"x"+height+" flip_wh="+flip_wh+" rot="+rot_ang);
+
+        if(flip_wh != (rot_ang==90 || rot_ang==270)) {
+            if(DEBUG) Log.i(TAG, "device is default-portrait, so doing extra 90");
+            rot_ang += 90;
+            mAccelerometer.rot90 = true;
+        } else {
+            mAccelerometer.rot90 = false;
+        }
+
+        gl.glRotatef(rot_ang, 0.0f, 0.0f, 1.0f);
     }
 
     private int getFnIdx() {
@@ -405,17 +418,25 @@ class RdnRenderer implements
         private Sensor mSensor;
         public float[] mVal = new float[3];
         private float mRange;
+        public boolean rot90;
 
         public AccelerometerReader(Context context) {
             mContext = context;
+            mVal[0] = 0;
+            mVal[1] = 10;
+            mVal[2] = 0;
             SensorManager sm = (SensorManager)mContext.getSystemService(mContext.SENSOR_SERVICE);
             mSensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-            mRange = mSensor.getMaximumRange();
+            if(mSensor != null) {
+                mRange = mSensor.getMaximumRange();
+            }
         }
 
         public void onResume() {
             SensorManager sm = (SensorManager)mContext.getSystemService(mContext.SENSOR_SERVICE);
-            sm.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_GAME);
+            if(mSensor != null) {
+                sm.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_GAME);
+            }
         }
 
         public void onPause() {
@@ -427,6 +448,11 @@ class RdnRenderer implements
             if(event.sensor == mSensor) {
                 for(int i=0; i<3; i++) {
                     mVal[i] = event.values[i] / mRange;
+                }
+                if(rot90) {
+                    float x = mVal[0];
+                    mVal[0] = mVal[1];
+                    mVal[1] = -x;
                 }
             }
         }
