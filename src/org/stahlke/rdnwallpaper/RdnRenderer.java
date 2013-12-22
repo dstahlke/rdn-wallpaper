@@ -143,10 +143,12 @@ class RdnRenderer implements
     public void onDrawFrame_inner(GL10 gl10) {
         GL11 gl = (GL11)gl10;
 
-        // It seems that pow2 sizes are not needed unless GL_REPEAT is used, but it
-        // never hurts to be careful.
-        mTexW = nextPow2(mGridW);
-        mTexH = nextPow2(mGridH);
+        //mTexW = nextPow2(mGridW);
+        //mTexH = nextPow2(mGridH);
+        // It seems that pow2 sizes are not needed unless GL_REPEAT is used.  And putting this
+        // extra buffer tends to cause gaps between tiles.
+        mTexW = mGridW;
+        mTexH = mGridH;
 
         if(mOldTexW != mTexW || mOldTexH != mTexH) {
             if(DEBUG) Log.i(TAG, "realloc tex="+mTexW+","+mTexH);

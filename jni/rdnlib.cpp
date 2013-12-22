@@ -346,9 +346,9 @@ struct FunctionBase : FunctionBaseBase {
             vecn *bufL  = grids->gridL .arr + y * w;
             vecn *bufDX = grids->gridDX.arr + y * w;
             vecn *bufDY = grids->gridDY.arr + y * w;
-            int stride = dir ? -3 : 3;
+            int pix_stride = dir ? -3 : 3;
             if(dir) pix_line += 3*(w-1);
-            pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, stride, acc);
+            pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, pix_stride, acc);
         }
 
 #if 1
