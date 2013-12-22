@@ -388,6 +388,7 @@ struct GinzburgLandau : public FunctionBase<2> {
         D     = *(p++);
         alpha = *(p++);
         beta  = *(p++);
+        D2 = D*D;
     }
 
     virtual matnn get_diffusion_matrix() {
@@ -432,15 +433,17 @@ struct GinzburgLandau : public FunctionBase<2> {
         ) {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
+                float lv = parent.D2 * bufL[x].dot(bufL[x]);
                 float rv = bufA[x].dot(bufA[x]);
-                float lv = parent.D * bufL[x].dot(bufL[x]);
 
                 float green = 0;
-                float blue  = lv * 500 * diffuse;
-                float red   = rv * 100 * diffuse + blue;
+                float red   = (0.5f-rv) * 500.0f * diffuse;
+                if(red < 0) red = 0;
+                float blue  = lv * 2000.0f * diffuse - red;
+                if(blue < 0) blue = 0;
 
                 if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
+                    float w = pow16(diffuse) * 100.0f;
                     red += w;
                     green += w;
                     blue += w;
@@ -463,20 +466,27 @@ struct GinzburgLandau : public FunctionBase<2> {
             for(int x = 0; x < w; x++) {
                 float U = bufA[x][0];
                 float V = bufA[x][1];
-                float lU = bufL[x][0];
-                float lV = bufL[x][1];
+                float lU = bufL[x][0] * parent.D;
+                float lV = bufL[x][1] * parent.D;
                 float diffuse = get_diffuse_cross(bufA[x], bufDX[x], bufDY[x], acc);
 
                 float rotA = U*lV - V*lU;
                 float rotB = U*lU + V*lV;
 
-                float green =  70.0f - rotA * 1000.0;
-                float blue  =  70.0f - rotB * 1000.0;
+                float green =  70.0f - rotA * 500.0;
+                float blue  =  70.0f - rotB * 500.0;
                 float red   = 0; //-70.0f + rv * 200.0f;
 
                 red   *= diffuse;
                 green *= diffuse;
                 blue  *= diffuse;
+
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 200.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -498,8 +508,9 @@ struct GinzburgLandau : public FunctionBase<2> {
                 float green = 25.0f + 150.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
+
                 if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
+                    float w = pow16(diffuse) * 150.0f;
                     red += w;
                     green += w;
                     blue += w;
@@ -521,12 +532,13 @@ struct GinzburgLandau : public FunctionBase<2> {
         }
     }
 
-    float D, alpha, beta;
+    float D, D2, alpha, beta;
     Palette<n> *pal_gl0;
     Palette<n> *pal_gl1;
     Palette<n> *pal_gl2;
 };
 
+#if 0
 struct GinzburgLandauQ : public FunctionBase<4> {
     static const int n = 4;
 
@@ -622,6 +634,7 @@ struct GinzburgLandauQ : public FunctionBase<4> {
                 float green = 25.0f + 150.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
+
                 if(diffuse > 0.8) {
                     float w = pow16(diffuse) * 50.0f;
                     red += w;
@@ -646,7 +659,7 @@ struct GinzburgLandauQ : public FunctionBase<4> {
             for(int x = 0; x < w; x++) {
                 float diffuse = get_diffuse_R2(bufA[x], bufDX[x], bufDY[x], acc);
                 float rv = bufA[x].dot(bufA[x]);
-                float lv = parent.D * bufL[x].dot(bufL[x]);
+                float lv = parent.D2 * bufL[x].dot(bufL[x]);
 
                 float green = 0;
                 float blue  = lv * 500 * diffuse;
@@ -679,6 +692,7 @@ struct GinzburgLandauQ : public FunctionBase<4> {
     Palette<n> *pal_gl0;
     Palette<n> *pal_gl1;
 };
+#endif
 
 struct GrayScott : public FunctionBase<2> {
     static const int n = 2;
@@ -772,6 +786,13 @@ struct GrayScott : public FunctionBase<2> {
                 green *= diffuse;
                 blue  *= diffuse;
 
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
+
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
@@ -801,6 +822,13 @@ struct GrayScott : public FunctionBase<2> {
                 green *= diffuse;
                 blue  *= diffuse;
 
+                if(diffuse > 0.8) {
+                    float w = pow16(diffuse) * 50.0f;
+                    red += w;
+                    green += w;
+                    blue += w;
+                }
+
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
         }
@@ -821,6 +849,7 @@ struct GrayScott : public FunctionBase<2> {
                 float green = 25.0f + 150.0f*diffuse;
                 float blue  = 0;
                 float red   = 0;
+
                 if(diffuse > 0.8) {
                     float w = pow16(diffuse) * 50.0f;
                     red += w;
@@ -850,6 +879,7 @@ struct GrayScott : public FunctionBase<2> {
     Palette<n> *pal_gs2;
 };
 
+#if 0
 struct WackerScholl : public FunctionBase<2> {
     static const int n = 2;
 
@@ -1005,11 +1035,12 @@ struct WackerScholl : public FunctionBase<2> {
     Palette<n> *pal_gs1;
     Palette<n> *pal_gs2;
 };
+#endif
 
 FunctionBaseBase *fn_list[] = {
     new GinzburgLandau(),
-    new GrayScott(),
-    new GinzburgLandauQ()
+    new GrayScott()
+    //new GinzburgLandauQ()
     //new WackerScholl()
 };
 FunctionBaseBase *fn = fn_list[0];
