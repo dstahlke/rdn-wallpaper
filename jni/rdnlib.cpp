@@ -25,12 +25,18 @@ float color_matrix[20];
 #define vecn Eigen::Matrix<float, n, 1>
 #define matnn Eigen::Matrix<float, n, n>
 
-float pow16(float x) {
-    x = x*x;
-    x = x*x;
-    x = x*x;
-    x = x*x;
-    return x;
+inline void apply_diffuse(float dp, float mag, float &r, float &g, float &b) {
+    if(dp < 0.94) return;
+    dp = dp*dp;
+    dp = dp*dp;
+    dp = dp*dp;
+    dp = dp*dp;
+    dp = dp*dp;
+    dp = dp*dp;
+    dp *= mag;
+    r += dp;
+    g += dp;
+    b += dp;
 }
 
 template <int n>
@@ -344,6 +350,32 @@ struct FunctionBase : FunctionBaseBase {
             if(dir) pix_line += 3*(w-1);
             pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, stride, acc);
         }
+
+#if 1
+        static int print_interval = 0;
+        if((print_interval++) % 20 == 0) {
+            vecn *bufA  = grids->gridA .arr;
+            vecn *bufL  = grids->gridL .arr;
+            vecn minA = bufA[0];
+            vecn maxA = bufA[0];
+            vecn minL = bufL[0];
+            vecn maxL = bufL[0];
+            for(int x=0; x<w*h; x++) {
+                for(int c=0; c<n; c++) {
+                    minA[c] = std::min(minA[c], bufA[x][c]);
+                    maxA[c] = std::max(maxA[c], bufA[x][c]);
+                    minL[c] = std::min(minL[c], bufL[x][c]);
+                    maxL[c] = std::max(maxL[c], bufL[x][c]);
+                }
+            }
+            for(int c=0; c<n; c++) {
+                LOGI("A[%d] range [%f,%f]", c, minA[c], maxA[c]);
+            }
+            for(int c=0; c<n; c++) {
+                LOGI("L[%d] range [%f,%f]", c, minL[c], maxL[c]);
+            }
+        }
+#endif
     }
 
     bool gradient_dirty;
@@ -442,12 +474,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                 float blue  = lv * 2000.0f * diffuse - red;
                 if(blue < 0) blue = 0;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 100.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 100.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -481,12 +508,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                 green *= diffuse;
                 blue  *= diffuse;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 200.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 200.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -509,12 +531,7 @@ struct GinzburgLandau : public FunctionBase<2> {
                 float blue  = 0;
                 float red   = 0;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 150.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 150.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -635,12 +652,7 @@ struct GinzburgLandauQ : public FunctionBase<4> {
                 float blue  = 0;
                 float red   = 0;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 50.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -665,12 +677,7 @@ struct GinzburgLandauQ : public FunctionBase<4> {
                 float blue  = lv * 500 * diffuse;
                 float red   = rv * 100 * diffuse + blue;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 50.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -777,21 +784,16 @@ struct GrayScott : public FunctionBase<2> {
                 //float LA = parent.D * bufL[x][0];
                 //float LB = parent.D * bufL[x][1];
 
-                float red   = (1.2f-A) * 150.0f;
+                float red   = (1.0f-A) * 150.0f;
                 float green = 0;
-                float blue  = (A*B*B - parent.F*(1.0f-A)) * 20000.0f;
+                float blue  = (A*B*B - parent.F*(1.0f-A)) * 30000.0f;
 
                 float diffuse = get_diffuse_A(bufA[x], bufDX[x], bufDY[x], acc);
                 red   *= diffuse;
                 green *= diffuse;
                 blue  *= diffuse;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 50.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -822,12 +824,7 @@ struct GrayScott : public FunctionBase<2> {
                 green *= diffuse;
                 blue  *= diffuse;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 50.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
@@ -850,12 +847,7 @@ struct GrayScott : public FunctionBase<2> {
                 float blue  = 0;
                 float red   = 0;
 
-                if(diffuse > 0.8) {
-                    float w = pow16(diffuse) * 50.0f;
-                    red += w;
-                    green += w;
-                    blue += w;
-                }
+                apply_diffuse(diffuse, 50.0f, red, green, blue);
 
                 to_rgb24(pix_line, red, green, blue); pix_line += stride;
             }
