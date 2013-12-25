@@ -351,7 +351,7 @@ struct FunctionBase : FunctionBaseBase {
             pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, pix_stride, acc);
         }
 
-#if 1
+#if 0
         static int print_interval = 0;
         if((print_interval++) % 20 == 0) {
             vecn *bufA  = grids->gridA .arr;
