@@ -73,10 +73,26 @@ public class RdnPrefs extends PreferenceActivity implements
         setListDefaultIfZero("repeatY", RdnWallpaper.getDefaultRepeatY(w, h));
 
         setHueKey();
+    }
+
+    @Override
+    public void onResume() {
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "RdnPrefs.onResume");
 
         // This is a hack to make the animation start running again (Android
         // pauses wallpapers when the settings dialog is opened).
-        RdnWallpaper.mRecentWaker.wakeupLatest();
+        RdnWallpaper.mRecentWaker.onPrefsVisibilityChanged(true);
+
+        super.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "RdnPrefs.onPause");
+
+        RdnWallpaper.mRecentWaker.onPrefsVisibilityChanged(false);
+
+        super.onPause();
     }
 
     private void setListDefaultIfZero(String id, int val) {

@@ -1,7 +1,7 @@
 TODO:
     test fresh install
     website
-    sometimes two can be running at once
+    put build instructions into readme
 
 To take screenshot:
     Exit the monitor

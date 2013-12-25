@@ -61,7 +61,10 @@ class RdnRenderer implements
     private int mOldTexW;
     private int mOldTexH;
     private SharedPreferences mPrefs;
-    private ReentrantLock mDrawLock = new ReentrantLock();
+    // This is a lock for JNI resources.  It is static in case two engines end up running
+    // simultaneously.  It is not desirable to have two engines running at once, but this can
+    // happen sometimes (see RecentWaker).
+    private static ReentrantLock mDrawLock = new ReentrantLock();
     private ByteBuffer mPixelBuffer;
     private int mTextureId = -1;
 
@@ -105,11 +108,9 @@ class RdnRenderer implements
 
         mAccelerometer = new AccelerometerReader(context);
 
-        PreferenceManager.setDefaultValues(context,
-                R.xml.prefs, false);
+        PreferenceManager.setDefaultValues(context, R.xml.prefs, false);
 
-        mPrefs = PreferenceManager
-                .getDefaultSharedPreferences(context);
+        mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
         mPrefs.registerOnSharedPreferenceChangeListener(this);
 
         setParamsToPrefs();

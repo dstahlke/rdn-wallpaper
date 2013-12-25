@@ -58,11 +58,7 @@ public class RdnWallpaper extends GLWallpaperService {
             if(DEBUG) Log.i(TAG, "RdnWallpaper.onVisibilityChanged("+visible+") for "+this);
             renderer.onVisibilityChanged(visible);
             super.onVisibilityChanged(visible);
-        }
-
-        public void wakeup() {
-            if(DEBUG) Log.i(TAG, "RdnWallpaper.wakeup for "+this);
-            onVisibilityChanged(true);
+            mRecentWaker.onEngineVisibilityChanged(this, visible);
         }
     }
 }
