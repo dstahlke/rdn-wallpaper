@@ -19,6 +19,11 @@
         -->
     </string-array>
 
+    <integer-array name="default_palette">
+        <item>1</item>
+        <item>0</item>
+    </integer-array>
+
     <string-array name="presets0">
         <item>A</item>
         <item>B</item>

@@ -25,7 +25,6 @@ public class PalettesBox extends Preference {
 
     private Context mContext;
     private LinearLayout mButtonsBox;
-    private int mFnId;
     private SharedPreferences mPrefs;
 
     public PalettesBox(Context context, AttributeSet attrs) {
@@ -49,12 +48,13 @@ public class PalettesBox extends Preference {
     }
 
     public void setFunction(int f_id) {
-        mFnId = f_id;
-        int pal = mPrefs.getInt("palette"+mFnId, 0);
+        int fn_id = RdnPrefs.getFnIdx(mPrefs);
+
+        int pal = RdnPrefs.getPaletteId(mContext);
 
         String[] labels = mContext.getResources().getStringArray(
                 mContext.getResources().getIdentifier(
-                    "palettes"+mFnId, "array", mContext.getPackageName()));
+                    "palettes"+fn_id, "array", mContext.getPackageName()));
 
         mButtonsBox.removeAllViews();
         RadioGroup rg = new RadioGroup(mContext);
@@ -80,8 +80,9 @@ public class PalettesBox extends Preference {
 
     protected void buttonClicked(int i) {
         if(RdnWallpaper.DEBUG) Log.i(TAG, "palette button clicked: "+i);
+        int fn_id = RdnPrefs.getFnIdx(mPrefs);
         SharedPreferences.Editor ed = mPrefs.edit();
-        ed.putInt("palette"+mFnId, i);
+        ed.putInt("palette"+fn_id, i);
         ed.apply();
     }
 

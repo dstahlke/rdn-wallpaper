@@ -120,29 +120,43 @@ public class RdnPrefs extends PreferenceActivity implements
         }
     }
 
+    public static int getFnIdx(SharedPreferences prefs) {
+        return Integer.parseInt(prefs.getString("function", "0"));
+    }
+
     public static float getHueVal(Context ctx) {
         SharedPreferences prefs = PreferenceManager
                 .getDefaultSharedPreferences(ctx);
-        int f_id = Integer.parseInt(prefs.getString("function", "0"));
-        int pal = prefs.getInt("palette"+f_id, 0);
-        String key = "hue"+f_id+"_"+pal;
+        int fn_id = getFnIdx(prefs);
+        int pal = RdnPrefs.getPaletteId(ctx);
+        String key = "hue"+fn_id+"_"+pal;
 
         TypedArray preset_vals = ctx.getResources().obtainTypedArray(
                 ctx.getResources().getIdentifier(
-                    "default_hue_"+f_id, "array", ctx.getPackageName()));
+                    "default_hue_"+fn_id, "array", ctx.getPackageName()));
         float default_val = preset_vals.getFloat(pal, 0);
+
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "default_hue_"+fn_id+"["+pal+"]="+default_val);
 
         return prefs.getFloat(key, default_val);
     }
 
+    public static int getPaletteId(Context ctx) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+        int fn_id = getFnIdx(prefs);
+        int[] default_pal = ctx.getResources().getIntArray(R.array.default_palette);
+        int pal = prefs.getInt("palette"+fn_id, default_pal[fn_id]);
+        return pal;
+    }
+
     private void setHueKey() {
-        SharedPreferences prefs = PreferenceManager
-                .getDefaultSharedPreferences(this);
-        int f_id = Integer.parseInt(prefs.getString("function", "0"));
-        int pal = prefs.getInt("palette"+f_id, 0);
-        String key = "hue"+f_id+"_"+pal;
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        int fn_id = getFnIdx(prefs);
+        int pal = getPaletteId(getApplicationContext());
+        String key = "hue"+fn_id+"_"+pal;
 
         float hue = getHueVal(getApplicationContext());
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "set "+key+"="+hue);
 
         mHueSlider.setKey(key);
         mHueSlider.setValue(hue);
@@ -161,23 +175,23 @@ public class RdnPrefs extends PreferenceActivity implements
     private void updateFunction(boolean allow_reset_grid) {
         SharedPreferences prefs = PreferenceManager
                 .getDefaultSharedPreferences(this);
-        int f_id = Integer.parseInt(prefs.getString("function", "0"));
-        if(f_id == mLastFunction) return;
-        mLastFunction = f_id;
-        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "function id="+f_id);
+        int fn_id = getFnIdx(prefs);
+        if(fn_id == mLastFunction) return;
+        mLastFunction = fn_id;
+        if(RdnWallpaper.DEBUG) Log.i(RdnWallpaper.TAG, "function id="+fn_id);
 
         PreferenceCategory sliders_box = (PreferenceCategory)findPreference("slider_params");
         sliders_box.removeAll();
-        for(SeekBarPreference slider : sliders.get(f_id)) {
+        for(SeekBarPreference slider : sliders.get(fn_id)) {
             sliders_box.addPreference(slider);
         }
 
         PresetsBox presets_box = (PresetsBox)findPreference("presets_box");
-        presets_box.setFunction(f_id);
-        presets_box.setSliders(sliders.get(f_id));
+        presets_box.setFunction(fn_id);
+        presets_box.setSliders(sliders.get(fn_id));
 
         PalettesBox palettes_box = (PalettesBox)findPreference("palettes_box");
-        palettes_box.setFunction(f_id);
+        palettes_box.setFunction(fn_id);
 
         if(allow_reset_grid) {
             RdnRenderer.resetGrid();

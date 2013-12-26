@@ -332,18 +332,14 @@ class RdnRenderer implements
         gl.glRotatef(rot_ang, 0.0f, 0.0f, 1.0f);
     }
 
-    private int getFnIdx() {
-        return Integer.parseInt(mPrefs.getString("function", "0"));
-    }
-
     public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
         if(DEBUG) Log.i(TAG, "alpha="+prefs.getFloat("param0", 0));
-        if(DEBUG) Log.i(TAG, "function="+getFnIdx());
+        if(DEBUG) Log.i(TAG, "function="+RdnPrefs.getFnIdx(mPrefs));
         setParamsToPrefs();
     }
 
     private float[] getParamsArray() {
-        int fn_idx = getFnIdx();
+        int fn_idx = RdnPrefs.getFnIdx(mPrefs);
         int len=0;
         for(len=0; ; len++) {
             if(!mPrefs.contains("param_"+fn_idx+"_"+len)) break;
@@ -356,7 +352,7 @@ class RdnRenderer implements
     }
 
     private void setParamsToPrefs() {
-        int fn_idx = getFnIdx();
+        int fn_idx = RdnPrefs.getFnIdx(mPrefs);
         float[] p_arr = getParamsArray();
 
         String s = "setParamsToPrefs="+fn_idx;
@@ -365,7 +361,7 @@ class RdnRenderer implements
         }
         if(DEBUG) Log.i(TAG, s);
 
-        int pal = mPrefs.getInt("palette"+fn_idx, 0);
+        int pal = RdnPrefs.getPaletteId(mContext);
         if(DEBUG) Log.i(TAG, "palette="+pal);
 
         float newHue = RdnPrefs.getHueVal(mContext);
