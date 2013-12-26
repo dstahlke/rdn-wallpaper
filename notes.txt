@@ -5,10 +5,10 @@ TODO:
 
 To take screenshot:
     Exit the monitor
-    adb jdwp
+    adb shell ps |grep rdn
     adb forward tcp:7777 jdwp:<nnn>
     jdb -sourcepath src -attach localhost:7777
-        stop in org.stahlke.rdnwallpaper.RdnWallpaper$MyEngine.drawFrame
+        stop in org.stahlke.rdnwallpaper.RdnRenderer.onDrawFrame
     Open the monitor and take screenshot
     Exit jdb
 

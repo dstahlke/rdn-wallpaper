@@ -3,9 +3,9 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:rdnwallpaper="http://www.stahlke.org/dan/rdnwallpaper">
 
-    <PreferenceCategory android:title="Function">
+    <PreferenceCategory android:title="Reaction">
         <ListPreference android:key="function"
-            android:title="Function"
+            android:title="Reaction"
             android:defaultValue="0"
             android:entries="@array/functions"
             android:entryValues="@array/functionsValues"
