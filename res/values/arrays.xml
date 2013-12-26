@@ -38,9 +38,9 @@
     </array>
 
     <array name="presets0_1">
-        <item>0.5</item>
-        <item>0.02</item>
-        <item>-1.27</item>
+        <item>0.33</item>
+        <item>3.0</item>
+        <item>0.46</item>
     </array>
 
     <array name="presets0_2">
@@ -50,9 +50,9 @@
     </array>
 
     <array name="presets0_3">
-        <item>2.0</item>
+        <item>1.5</item>
         <item>1.2</item>
-        <item>4.0</item>
+        <item>1.0</item>
     </array>
 
     <string-array name="presets1">
@@ -147,7 +147,7 @@
     </string-array>
 
     <array name="default_hue_0">
-        <item>250</item>
+        <item>340</item>
         <item>68</item>
         <item>90</item>
     </array>

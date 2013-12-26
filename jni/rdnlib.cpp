@@ -351,7 +351,7 @@ struct FunctionBase : FunctionBaseBase {
             pal->render_line(pix_line, bufA, bufL, bufDX, bufDY, w, pix_stride, acc);
         }
 
-#if 0
+#if 1
         static int print_interval = 0;
         if((print_interval++) % 20 == 0) {
             vecn *bufA  = grids->gridA .arr;
@@ -469,9 +469,9 @@ struct GinzburgLandau : public FunctionBase<2> {
                 float rv = bufA[x].dot(bufA[x]);
 
                 float green = 0;
-                float red   = (0.5f-rv) * 500.0f * diffuse;
+                float red   = (1.0f-rv) * 500.0f * diffuse;
                 if(red < 0) red = 0;
-                float blue  = lv * 2000.0f * diffuse - red;
+                float blue  = lv * 4000.0f * diffuse - red;
                 if(blue < 0) blue = 0;
 
                 apply_diffuse(diffuse, 100.0f, red, green, blue);
