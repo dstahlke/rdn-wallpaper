@@ -1,3 +1,8 @@
+TODO:
+    detect stable states and reset grid
+    free some memory when not visible
+    ICS tablet: settings hide "set wallpaper" button
+
 To take screenshot:
     Exit the monitor
     adb shell ps |grep rdn
